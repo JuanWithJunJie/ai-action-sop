@@ -1,6 +1,7 @@
 """推理 Worker —— QThread 子类，跑 MediaPipe + LSTM + 顺序状态机。"""
 import csv
 import json
+import time
 from collections import deque
 from datetime import datetime
 from pathlib import Path
@@ -52,9 +53,14 @@ class InferenceWorker(QThread):
     sig_finished = pyqtSignal(dict)
     sig_error = pyqtSignal(str)
 
-    def __init__(self, video_path: str, params: RuntimeParams, parent=None):
+    def __init__(self, video_source: str, params: RuntimeParams, parent=None):
         super().__init__(parent)
-        self.video_path = Path(video_path)
+        self.video_source = video_source
+        self.is_live = (
+            video_source.isdigit()
+            or video_source.lower().startswith(("rtsp://", "http://", "https://"))
+        )
+        self.video_path = Path(video_source) if not self.is_live else None
         self.params = params
         self._stop = False
         self._pause = False
@@ -121,7 +127,7 @@ class InferenceWorker(QThread):
         """构建 4 步动作列表：优先用 timeline.csv 的标注顺序，否则用 DEFAULT_ACTION_DEFS。"""
         self.actions = []
 
-        if TIMELINE_CSV.exists():
+        if self.video_path is not None and TIMELINE_CSV.exists():
             try:
                 df = pd.read_csv(TIMELINE_CSV)
                 video_name = self.video_path.name
@@ -150,7 +156,13 @@ class InferenceWorker(QThread):
         """创建本次运行专属的输出目录（截图/日志都放这），用视频名 + 时间戳避免覆盖。"""
         RUNS_GUI_DIR.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.run_dir = RUNS_GUI_DIR / f"{self.video_path.stem}_{stamp}"
+        if self.video_path is not None:
+            name = self.video_path.stem
+        elif self.video_source.isdigit():
+            name = f"camera{self.video_source}"
+        else:
+            name = "rtsp"
+        self.run_dir = RUNS_GUI_DIR / f"{name}_{stamp}"
         self.run_dir.mkdir(parents=True, exist_ok=True)
         (self.run_dir / "snapshots").mkdir(exist_ok=True)
 
@@ -224,9 +236,14 @@ class InferenceWorker(QThread):
             self.sig_status.emit({"action_defs": [a.show for a in self.actions], "total": len(self.actions)})
 
             # === 视频源 + 帧级缓冲队列 ===
-            cap = cv2.VideoCapture(str(self.video_path))
+            if self.is_live:
+                cap = cv2.VideoCapture(int(self.video_source) if self.video_source.isdigit() else self.video_source)
+                live_t0 = time.monotonic()      # 实时源用墙钟计时（摄像头/RTSP 无固定帧率语义）
+            else:
+                cap = cv2.VideoCapture(str(self.video_path))
+                live_t0 = None
             if not cap.isOpened():
-                raise RuntimeError(f"无法打开视频: {self.video_path}")
+                raise RuntimeError(f"无法打开视频源: {self.video_source}")
 
             fps = cap.get(cv2.CAP_PROP_FPS) or 30.0   # 视频帧率；读取失败或为 0 时兜底用 30（t_sec = frame_id/fps 算时间戳用）
             frame_id = 0                              # 帧计数器：每读一帧 +1，既算时间戳也用于 UI 显示
@@ -244,8 +261,8 @@ class InferenceWorker(QThread):
                 if not ok:
                     break
 
-                # t_sec 用帧号/fps 算（不是墙钟），保证回放时间与录制时间一致
-                t_sec = frame_id / fps          # 本帧在视频内的时间（秒）
+                # t_sec：文件用帧号/fps（回放时间与录制一致）；实时源用墙钟流逝（从打开源开始算）
+                t_sec = (time.monotonic() - live_t0) if live_t0 is not None else frame_id / fps
                 # === ② MediaPipe + ③ 拼 126 维特征并入队 ===
                 vis, hands_out = self._detect_frame(frame)   # MediaPipe 手部关键点（vis=带渲染的画面）
                 feat_queue.append(build_feature_row(hands_out))  # 拼成 126 维特征行并入缓冲队列
@@ -568,7 +585,7 @@ class InferenceWorker(QThread):
         csv_path = self.run_dir / "events.csv"
 
         result_obj = {
-            "video": self.video_path.name,
+            "video": self.video_path.name if self.video_path is not None else self.video_source,
             "total_cycles": self.cycle,
             "completed_cycles": len(self.cycle_times_sec),
             "cycle_times_sec": self.cycle_times_sec,

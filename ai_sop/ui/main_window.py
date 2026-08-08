@@ -73,7 +73,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("AI-SOP Vision | 手机制造智能SOP系统")
         self.setWindowFlags(Qt.FramelessWindowHint)   # 无边框窗口，自己实现拖动/最大化
         self.resize(1920, 1080)
-        self.video_path: Optional[Path] = None
+        self.video_source: Optional[str] = None   # 视频源：文件路径 / 摄像头索引(如 "0") / RTSP 地址
         self.worker: Optional[InferenceWorker] = None
         self.last_run_dir: Optional[Path] = None
         self.pass_count = 0     # 完成事件数
@@ -454,17 +454,27 @@ class MainWindow(QMainWindow):
         f_layout.setSpacing(8)
 
         self.btn_import = QPushButton("导入视频")
+        self.btn_camera = QPushButton("摄像头")
         self.btn_start = QPushButton("开始分析")
         self.btn_pause = QPushButton("暂停/继续")
         self.btn_stop = QPushButton("停止")
         self.btn_export = QPushButton("导出结果")
         f_layout.addWidget(self.btn_import)
+        f_layout.addWidget(self.btn_camera)
         f_layout.addWidget(self.btn_start)
         f_layout.addWidget(self.btn_pause)
         f_layout.addWidget(self.btn_stop)
         f_layout.addWidget(self.btn_export)
 
         f_layout.addStretch()
+
+        self.edit_rtsp = QLineEdit("")
+        self.edit_rtsp.setPlaceholderText("RTSP 地址 (rtsp://...)")
+        self.edit_rtsp.setFixedWidth(230)
+        self.btn_rtsp = QPushButton("连接RTSP")
+        f_layout.addWidget(self.edit_rtsp)
+        f_layout.addWidget(self.btn_rtsp)
+        f_layout.addSpacing(10)
 
         self.edit_lstm = QLineEdit("0.15")
 
@@ -484,6 +494,8 @@ class MainWindow(QMainWindow):
     def _connect_signals(self):
         """按钮点击信号 → 对应槽函数。"""
         self.btn_import.clicked.connect(self.on_import_video)
+        self.btn_camera.clicked.connect(self.on_camera)
+        self.btn_rtsp.clicked.connect(self.on_rtsp)
         self.btn_start.clicked.connect(self.on_start)
         self.btn_pause.clicked.connect(self.on_pause)
         self.btn_stop.clicked.connect(self.on_stop)
@@ -537,10 +549,26 @@ class MainWindow(QMainWindow):
         h, w = frame.shape[:2]
         cap.release()
 
-        self.video_path = path
+        self.video_source = str(path)
         self.video_label.setText("")
         pix = QPixmap.fromImage(bgr_to_qimage(frame))
         self._set_video_preview_pixmap(pix)
+
+    def on_camera(self):
+        """「摄像头」按钮槽：使用默认摄像头（索引 0）作为视频源。"""
+        self.video_source = "0"
+        self.video_label.setPixmap(QPixmap())
+        self.video_label.setText("摄像头已就绪，点击「开始分析」")
+
+    def on_rtsp(self):
+        """「连接RTSP」按钮槽：使用输入框中的 RTSP 地址作为视频源。"""
+        url = self.edit_rtsp.text().strip()
+        if not url:
+            show_message(self, "warning", "提示", "请输入 RTSP 地址")
+            return
+        self.video_source = url
+        self.video_label.setPixmap(QPixmap())
+        self.video_label.setText(f"RTSP: {url}")
 
     def _reset_cards(self, names: List[str]):
         """多周期循环重置时把所有步骤卡片重置为 pending 状态、刷新名称。"""
@@ -566,8 +594,8 @@ class MainWindow(QMainWindow):
         if self.worker and self.worker.isRunning():
             show_message(self, "info", "提示", "正在分析中")
             return
-        if not self.video_path:
-            show_message(self, "warning", "提示", "请先导入视频")
+        if not self.video_source:
+            show_message(self, "warning", "提示", "请先选择视频源（导入视频 / 摄像头 / RTSP）")
             return
 
         try:
@@ -592,7 +620,7 @@ class MainWindow(QMainWindow):
 
         self._clear_events()
 
-        self.worker = InferenceWorker(str(self.video_path), params)
+        self.worker = InferenceWorker(self.video_source, params)
         self.worker.sig_frame.connect(self.on_frame)
         self.worker.sig_status.connect(self.on_status)
         self.worker.sig_action.connect(self.on_action)
