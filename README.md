@@ -77,7 +77,7 @@ PyQt5==5.15.10
 ## 总体架构
 
 ```text
-视频输入（文件 / RTSP流 / 摄像头）
+视频输入（视频文件；RTSP / 摄像头需自行接入）
   │
   └──> MediaPipe 手关键点（手部时序）
           │
@@ -107,6 +107,7 @@ PyQt5==5.15.10
 ├── train_lstm.py              # LSTM 训练：数据增强 + 类别权重 + 训练
 ├── auto_label.py              # 自动伪标注：KNN 相似度给未标注区间打标签
 ├── requirements.txt           # Python 依赖
+├── start.sh                   # Linux 一键启动脚本
 ├── .gitignore
 │
 ├── video/                     # 测试视频（需自行创建，已 gitignore）
@@ -146,6 +147,8 @@ pip install torch==2.2.2 torchvision==0.17.2 --index-url https://download.pytorc
 ```bash
 python ai_sop_gui.py
 ```
+
+> 也可用 `python -m ai_sop` 启动（两者等价）。
 
 GUI 操作：
 1. 点击「导入视频」选择 `.mp4` 文件
