@@ -129,7 +129,10 @@ class StepCard(QFrame):
         self.set_status(self.status)
 
     def set_status(self, status: str, info: str = ""):
-        """更新步骤状态并切换颜色 / 显示文案（pending/进行中/完成/超时跳过）。"""
+        """更新步骤状态并切换颜色 / 显示文案（pending/进行中/完成/超时跳过）。
+
+        info 用于追加耗时信息（如「耗时 3.42s」「超时 6.02s」）。
+        """
         self.status = status
         self._apply_style()
 
@@ -144,7 +147,7 @@ class StepCard(QFrame):
         }
         text, color = status_map.get(status, (status, "#5a6b7d"))
         s = lambda v: max(1, int(v * self._scale))
-        self.lbl_status.setText(text)
+        self.lbl_status.setText(f"{text} {info}" if info else text)
         self.lbl_status.setStyleSheet(f"font-size: {s(12)}px; color: {color}; padding-top: 4px;")
 
         num_color = "#5a6b7d"
@@ -161,6 +164,10 @@ class StepCard(QFrame):
         if status not in ("完成", "done"):
             self.lbl_snapshot.setVisible(False)
             self.lbl_snapshot.setPixmap(QPixmap())
+
+    def set_active_elapsed(self, elapsed: float):
+        """进行中步骤实时显示已耗时（秒），由主窗口每帧刷新。"""
+        self.lbl_status.setText(f"进行中 {elapsed:.1f}s")
 
     def set_confidence(self, conf: float):
         """更新置信度进度条和百分比文字（仅「进行中」状态显示）。"""

@@ -24,6 +24,9 @@ class ActionRuntime:
     done: bool = False                                 # 该步骤是否已完成
     hit_count: int = 0                                 # 当前累计命中帧数（连续达标才递增，否则清零）
     expected_conf: float = 0.0                         # 最近一帧期望动作的置信度
+    start_time_sec: Optional[float] = None             # 步骤开始时间（视频秒，进入该步骤的第一帧）
+    duration_sec: Optional[float] = None               # 步骤耗时 = done_time_sec - start_time_sec
+    start_time_beijing: Optional[str] = None           # 步骤开始时间（北京时间）
     done_time_sec: Optional[float] = None              # 完成时间（视频内秒数）
     snapshot_path: Optional[str] = None                # 截图保存路径
 

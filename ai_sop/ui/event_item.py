@@ -8,7 +8,8 @@ from ai_sop.core.constants import C_CYAN, C_MUTED, C_PRIMARY, F_MONO
 class EventItem(QWidget):
     """事件日志单行控件（底部时间线列表的一项）。
 
-    显示：✓ 或 ! 图标 + 步骤名 + 时间 + 周期编号（C1/C2…）。
+    显示：✓ / ◉ / ! 图标 + 步骤名 + 时间 + 周期编号（C1/C2…）。
+    event_type：done=步骤完成，cycle=周期完成（CT），其他=超时跳过。
     """
     def __init__(self, step_name: str, event_type: str, cycle: int, time_str: str, parent=None):
         super().__init__(parent)
@@ -18,13 +19,19 @@ class EventItem(QWidget):
         layout.setContentsMargins(0, 2, 0, 2)
         layout.setSpacing(8)
 
-        icon = QLabel("✓" if event_type == "done" else "!")
+        if event_type == "done":
+            icon_text, icon_bg, icon_color = "✓", "rgba(0,255,136,0.15)", "#00ff88"
+        elif event_type == "cycle":
+            icon_text, icon_bg, icon_color = "◉", "rgba(0,212,255,0.15)", "#00d4ff"
+        else:
+            icon_text, icon_bg, icon_color = "!", "rgba(255,68,102,0.15)", "#ff4466"
+
+        icon = QLabel(icon_text)
         icon.setFixedSize(20, 20)
         icon.setAlignment(Qt.AlignCenter)
         icon.setStyleSheet(
-            f"background: {'rgba(0,255,136,0.15)' if event_type == 'done' else 'rgba(255,68,102,0.15)'}; "
-            f"border-radius: 4px; font-size: 11px; font-weight: 700; "
-            f"color: {'#00ff88' if event_type == 'done' else '#ff4466'};"
+            f"background: {icon_bg}; border-radius: 4px; font-size: 11px; font-weight: 700; "
+            f"color: {icon_color};"
         )
         layout.addWidget(icon)
 

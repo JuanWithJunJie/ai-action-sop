@@ -78,6 +78,9 @@ class InferenceWorker(QThread):
         self.expected_stage_start_sec = 0.0                # 当前期望步骤开始时间（用于超时判断 + 最小持续时间）
         self.last_expected_idx = -1                        # 上一次的 expected_idx，用于检测「步骤刚切换」
         self.cycle = 1                                     # 多周期循环计数器（D1→D4 走完 +1）
+        self.cycle_start_sec: Optional[float] = None       # 当前周期开始时间（D1 进入时记录，用于算 CT）
+        self.cycle_start_beijing: Optional[str] = None     # 当前周期开始时间（北京时间）
+        self.cycle_times_sec: List[float] = []             # 已完成的周期 CT（Cycle Time）列表
 
         self.run_dir: Optional[Path] = None
         self.events: List[dict] = []                       # 事件日志（每步骤完成/超时记一条）
@@ -188,10 +191,15 @@ class InferenceWorker(QThread):
         self.expected_idx = 0
         self.cycle += 1
         self.last_expected_idx = -1
+        self.cycle_start_sec = None                      # 周期开始时间留空，下一轮 D1 入场时重新记录
+        self.cycle_start_beijing = None
         for a in self.actions:
             a.done = False
             a.hit_count = 0
             a.expected_conf = 0.0
+            a.start_time_sec = None
+            a.duration_sec = None
+            a.start_time_beijing = None
             a.done_time_sec = None
             a.snapshot_path = None
         self.sig_status.emit({
@@ -250,6 +258,11 @@ class InferenceWorker(QThread):
                     expected_show = expected_action.show            # 期望步骤的显示名
                     if self.expected_idx != self.last_expected_idx: # 刚切换到新步骤（首次进入/上一步完成）
                         self.expected_stage_start_sec = t_sec       # 记录本步骤开始时间（超时判断 + 最小持续用）
+                        expected_action.start_time_sec = t_sec      # 记录本步骤开始时间（步骤耗时用）
+                        expected_action.start_time_beijing = to_beijing_time_str()
+                        if self.expected_idx == 0:                  # 周期第一步入场 → 记录周期开始（算 CT）
+                            self.cycle_start_sec = t_sec
+                            self.cycle_start_beijing = expected_action.start_time_beijing
                         self.last_expected_idx = self.expected_idx  # 更新标记，避免每帧重复记录
 
                 # === ⑤ 多尺度窗口 LSTM 投票：用特征缓冲跑 3 窗口 LSTM + 双轮多数票
@@ -409,6 +422,8 @@ class InferenceWorker(QThread):
         """分支 A：步骤完成 → 截图 + 事件 + 信号 + 推进 + 多周期重置。"""
         expected_action.done = True
         expected_action.done_time_sec = t_sec
+        duration_sec = round(t_sec - (expected_action.start_time_sec or self.expected_stage_start_sec), 3)
+        expected_action.duration_sec = duration_sec
 
         if self.params.save_snapshots:
             expected_action.snapshot_path = self._save_snapshot(vis, expected_action, t_sec)
@@ -420,6 +435,9 @@ class InferenceWorker(QThread):
                 "index": expected_action.index + 1,
                 "action": expected_action.show,
                 "fine_label": expected_action.fine_label,
+                "start_time_sec": round(expected_action.start_time_sec or self.expected_stage_start_sec, 3),
+                "duration_sec": duration_sec,
+                "start_time_beijing": expected_action.start_time_beijing or "",
                 "done_time_sec": round(t_sec, 3),
                 "done_time_beijing": done_time_beijing,
                 "snapshot_path": expected_action.snapshot_path or "",
@@ -431,7 +449,7 @@ class InferenceWorker(QThread):
             {
                 "index": expected_action.index,
                 "status": "完成",
-                "info": f"完成时间（北京时间）: {done_time_beijing}",
+                "info": f"耗时 {duration_sec:.2f}s",
                 "snapshot": expected_action.snapshot_path,
             }
         )
@@ -441,10 +459,13 @@ class InferenceWorker(QThread):
 
         # 多周期循环：4 步全部完成 → 重置状态 + cycle+1
         if self.expected_idx >= len(self.actions):
+            self._finalize_cycle(t_sec)
             self._reset_cycle()
 
     def _timeout_action(self, expected_action, t_sec):
         """分支 B：超时跳过 → 事件 + 信号 + 推进 + 多周期重置。"""
+        duration_sec = round(t_sec - (expected_action.start_time_sec or self.expected_stage_start_sec), 3)
+        expected_action.duration_sec = duration_sec
         done_time_beijing = to_beijing_time_str()
         self.events.append(
             {
@@ -452,6 +473,9 @@ class InferenceWorker(QThread):
                 "index": expected_action.index + 1,
                 "action": expected_action.show,
                 "fine_label": expected_action.fine_label,
+                "start_time_sec": round(expected_action.start_time_sec or self.expected_stage_start_sec, 3),
+                "duration_sec": duration_sec,
+                "start_time_beijing": expected_action.start_time_beijing or "",
                 "done_time_sec": round(t_sec, 3),
                 "done_time_beijing": done_time_beijing,
                 "snapshot_path": "",
@@ -463,7 +487,7 @@ class InferenceWorker(QThread):
             {
                 "index": expected_action.index,
                 "status": "超时跳过",
-                "info": f"超时跳过 ({STEP_TIMEOUT_SEC}s)",
+                "info": f"超时 {duration_sec:.2f}s",
                 "snapshot": None,
             }
         )
@@ -473,13 +497,49 @@ class InferenceWorker(QThread):
 
         # 多周期循环：超时分支与完成分支一致
         if self.expected_idx >= len(self.actions):
+            self._finalize_cycle(t_sec)
             self._reset_cycle()
+
+    def _finalize_cycle(self, t_sec):
+        """周期完成：计算 CT（D4 完成时间 − D1 开始时间），追加「周期完成」事件并广播 UI。"""
+        if self.cycle_start_sec is None:
+            return
+        cycle_time = round(t_sec - self.cycle_start_sec, 3)
+        self.cycle_times_sec.append(cycle_time)
+        avg_cycle_time = round(sum(self.cycle_times_sec) / len(self.cycle_times_sec), 3)
+        self.events.append(
+            {
+                "cycle": self.cycle,
+                "event_type": "cycle",
+                "action": "",
+                "fine_label": "",
+                "start_time_sec": round(self.cycle_start_sec, 3),
+                "duration_sec": cycle_time,
+                "start_time_beijing": self.cycle_start_beijing or "",
+                "done_time_sec": round(t_sec, 3),
+                "done_time_beijing": to_beijing_time_str(),
+                "snapshot_path": "",
+                "cycle_time_sec": cycle_time,
+                "status": "周期完成",
+            }
+        )
+        self.sig_action.emit(
+            {
+                "index": -1,
+                "status": "周期完成",
+                "info": f"CT {cycle_time:.2f}s",
+                "snapshot": None,
+                "cycle_time_sec": cycle_time,
+                "avg_cycle_time_sec": avg_cycle_time,
+            }
+        )
 
     def _broadcast_frame_status(self, frame_id, t_sec, current_pred, expected_show, expected_conf, top3_text, vis):
         """⑧ 广播本帧状态 + 渲染画面到 UI。"""
         status = {
             "frame_id": frame_id,
             "time_sec": t_sec,
+            "stage_start_sec": self.expected_stage_start_sec,   # 当前步骤开始时间（UI 实时显示步骤耗时用）
             "current_pred": action_to_cn(current_pred),   # LSTM 当前预测（仅显示，不驱动状态机）
             "expected_show": expected_show,
             "expected_conf": expected_conf,
@@ -503,6 +563,12 @@ class InferenceWorker(QThread):
         result_obj = {
             "video": self.video_path.name,
             "total_cycles": self.cycle,
+            "completed_cycles": len(self.cycle_times_sec),
+            "cycle_times_sec": self.cycle_times_sec,
+            "avg_cycle_time_sec": (
+                round(sum(self.cycle_times_sec) / len(self.cycle_times_sec), 3)
+                if self.cycle_times_sec else None
+            ),
             "completed_events": len(self.events),
             "total_steps": len(self.actions),
             "events": self.events,
@@ -512,7 +578,13 @@ class InferenceWorker(QThread):
         with csv_path.open("w", newline="", encoding="utf-8-sig") as f:
             writer = csv.DictWriter(
                 f,
-                fieldnames=["cycle", "index", "action", "fine_label", "done_time_sec", "done_time_beijing", "snapshot_path", "status"],
+                fieldnames=[
+                    "cycle", "index", "event_type", "action", "fine_label",
+                    "start_time_sec", "duration_sec", "start_time_beijing",
+                    "done_time_sec", "done_time_beijing", "snapshot_path",
+                    "cycle_time_sec", "status",
+                ],
+                restval="",
             )
             writer.writeheader()
             for row in self.events:

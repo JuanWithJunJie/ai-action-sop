@@ -403,9 +403,15 @@ class MainWindow(QMainWindow):
         self.lbl_skip.setStyleSheet(f"font-size: 14px; font-weight: 600; font-family: '{F_MONO}'; color: {C_RED}; border: none;")
         self.lbl_total = QLabel("总计: 0")
         self.lbl_total.setStyleSheet(f"font-size: 14px; font-weight: 600; font-family: '{F_MONO}'; color: {C_PRIMARY}; border: none;")
+        self.lbl_ct = QLabel("CT: --")
+        self.lbl_ct.setStyleSheet(f"font-size: 14px; font-weight: 600; font-family: '{F_MONO}'; color: {C_CYAN}; border: none;")
+        self.lbl_avg_ct = QLabel("均CT: --")
+        self.lbl_avg_ct.setStyleSheet(f"font-size: 14px; font-weight: 600; font-family: '{F_MONO}'; color: {C_MUTED}; border: none;")
         stats_info.addWidget(self.lbl_pass)
         stats_info.addWidget(self.lbl_skip)
         stats_info.addWidget(self.lbl_total)
+        stats_info.addWidget(self.lbl_ct)
+        stats_info.addWidget(self.lbl_avg_ct)
         stats_row.addLayout(stats_info)
         stats_row.addStretch()
         sp_layout.addLayout(stats_row)
@@ -575,6 +581,8 @@ class MainWindow(QMainWindow):
         self.lbl_pass.setText("合格: 0")
         self.lbl_skip.setText("超时: 0")
         self.lbl_total.setText("总计: 0")
+        self.lbl_ct.setText("CT: --")
+        self.lbl_avg_ct.setText("均CT: --")
         self.stat_ring.set_rate(100)
         for c in self.cards:
             c.set_status("pending")
@@ -648,6 +656,10 @@ class MainWindow(QMainWindow):
             self.lbl_skip.setStyleSheet(f"font-size: {s(18)}px; font-weight: 600; font-family: '{F_MONO}'; color: {C_RED}; border: none;")
         if hasattr(self, 'lbl_total'):
             self.lbl_total.setStyleSheet(f"font-size: {s(18)}px; font-weight: 600; font-family: '{F_MONO}'; color: {C_PRIMARY}; border: none;")
+        if hasattr(self, 'lbl_ct'):
+            self.lbl_ct.setStyleSheet(f"font-size: {s(18)}px; font-weight: 600; font-family: '{F_MONO}'; color: {C_CYAN}; border: none;")
+        if hasattr(self, 'lbl_avg_ct'):
+            self.lbl_avg_ct.setStyleSheet(f"font-size: {s(18)}px; font-weight: 600; font-family: '{F_MONO}'; color: {C_MUTED}; border: none;")
 
         if hasattr(self, 'bottom_labels'):
             for key, lbl in self.bottom_labels.items():
@@ -735,6 +747,8 @@ class MainWindow(QMainWindow):
             elif i == p:
                 card.set_status("进行中")
                 card.set_confidence(conf)
+                elapsed = max(0.0, st.get("time_sec", 0.0) - st.get("stage_start_sec", 0.0))
+                card.set_active_elapsed(elapsed)
             else:
                 if card.status not in ("done", "timeout"):
                     card.set_status("pending")
@@ -749,6 +763,17 @@ class MainWindow(QMainWindow):
         """
         idx = int(ev.get("index", -1))
         status = ev.get("status", "完成")
+
+        # 周期完成事件（index=-1）：更新 CT 统计 + 事件流，不参与合格率统计
+        if status == "周期完成":
+            ct = ev.get("cycle_time_sec", 0.0)
+            avg = ev.get("avg_cycle_time_sec", 0.0)
+            self.lbl_ct.setText(f"CT: {ct:.2f}s")
+            self.lbl_avg_ct.setText(f"均CT: {avg:.2f}s")
+            cycle = int(self.lbl_cycle.text())
+            time_str = datetime.now().strftime("%H:%M:%S")
+            self._add_event(f"周期 {cycle} 完成", "cycle", cycle, f"CT: {ct:.2f}s · {time_str}")
+            return
 
         if 0 <= idx < len(self.cards):
             self.cards[idx].set_status(status, ev.get("info", ""))
