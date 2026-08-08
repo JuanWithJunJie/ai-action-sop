@@ -97,18 +97,10 @@ PyQt5==5.15.10
 ├── extract_features.py        # 特征提取：视频 → 126维 .npy
 ├── train_lstm.py              # LSTM 训练：数据增强 + 类别权重 + 训练
 ├── auto_label.py              # 自动伪标注：KNN 相似度给未标注区间打标签
-├── train_yolo_mirror.py       # YOLO 训练脚本
 ├── requirements.txt           # Python 依赖
 ├── .gitignore
 │
 ├── video/                     # 测试视频
-├── yolo/                      # YOLO 数据集（标注文件）
-│   ├── data.yaml
-│   ├── train/labels/
-│   ├── val/labels/
-│   └── test/labels/
-│
-├── runs_detect/               # YOLO 训练输出（含 best.pt）
 ├── lstm_runs_fine/            # LSTM 模型权重 + 配置
 │   ├── best_lstm_fine.pt
 │   └── config.json
