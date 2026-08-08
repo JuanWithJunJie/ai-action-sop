@@ -62,6 +62,12 @@ SITE_INFO = {
 DEFAULT_VIDEO_SOURCE = CONFIG.get("video", {}).get("default_source", "")
 DEFAULT_RTSP_URL = CONFIG.get("video", {}).get("rtsp_url", "")
 
+# ===== MES / 中央系统上报（config.json 可覆盖）=====
+_MES = CONFIG.get("mes", {})
+MES_ENABLED = bool(_MES.get("enabled", False))
+MES_URL = _MES.get("url", "")
+MES_TOKEN = _MES.get("token", "")
+
 HAND_LANDMARK_THICKNESS = 4
 HAND_CONNECTION_THICKNESS = 4
 HAND_CIRCLE_RADIUS = 5

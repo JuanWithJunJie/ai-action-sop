@@ -9,6 +9,11 @@
     "default_source": "",
     "rtsp_url": ""
   },
+  "mes": {
+    "enabled": false,
+    "url": "",
+    "token": ""
+  },
   "model": {
     "lstm_model": "lstm_runs_fine/best_lstm_fine.pt",
     "lstm_config": "lstm_runs_fine/config.json"

@@ -23,10 +23,14 @@ from ai_sop.core.constants import (
     LSTM_CONFIG_PATH,
     LSTM_MODEL_PATH,
     MAX_RECONNECT_ATTEMPTS,
+    MES_ENABLED,
+    MES_TOKEN,
+    MES_URL,
     PENDING_FEATURES_DIR,
     PENDING_LABELS_CSV,
     RECONNECT_DELAY_SEC,
     RUNS_GUI_DIR,
+    SITE_INFO,
     SLOW_RATIO_THRESHOLD,
     SOURCE_WINDOWS,
     STEP_MIN_STAGE_SEC,
@@ -35,7 +39,7 @@ from ai_sop.core.constants import (
 )
 from ai_sop.core.features import build_feature_row
 from ai_sop.core.models import ActionLSTM, ActionRuntime, RuntimeParams
-from ai_sop.core.utils import action_to_cn, bgr_to_qimage, fine_label_from_row, to_beijing_time_str
+from ai_sop.core.utils import action_to_cn, bgr_to_qimage, fine_label_from_row, http_post_json, to_beijing_time_str
 
 try:
     import mediapipe as mp
@@ -639,6 +643,29 @@ class InferenceWorker(QThread):
                 "avg_cycle_time_sec": avg_cycle_time,
             }
         )
+
+        # MES / 中央系统上报：周期完成数据（含工位信息与各步耗时）
+        if MES_ENABLED and MES_URL:
+            payload = {
+                "event_type": "cycle_completed",
+                "cycle": self.cycle,
+                "cycle_time_sec": cycle_time,
+                "avg_cycle_time_sec": avg_cycle_time,
+                "steps": [
+                    {
+                        "index": a.index + 1,
+                        "fine_label": a.fine_label,
+                        "duration_sec": a.duration_sec,
+                        "status": "完成" if a.done else "超时跳过",
+                    }
+                    for a in self.actions
+                ],
+                "site": SITE_INFO,
+                "video": self.video_source,
+                "reported_at": to_beijing_time_str(),
+            }
+            ok = http_post_json(MES_URL, payload, MES_TOKEN)
+            print(f"[MES] 周期 {self.cycle} 上报 {'成功' if ok else '失败'}")
 
     def _broadcast_frame_status(self, frame_id, t_sec, current_pred, expected_show, expected_conf, top3_text, vis, stage_start_sec=None):
         """⑧ 广播本帧状态 + 渲染画面到 UI。"""

@@ -1,4 +1,6 @@
 """杂项工具：图像转换、时间、标签映射。"""
+import json
+import urllib.request
 from datetime import datetime, timedelta, timezone
 
 import cv2
@@ -46,3 +48,20 @@ def fine_label_from_row(step_id, _target_id, _event_type):
     if s == "D4":
         return "D4_place_material"
     return "background"
+
+
+def http_post_json(url: str, payload: dict, token: str = "", timeout: float = 5.0) -> bool:
+    """POST JSON 到 MES / 中央系统；任何失败都返回 False（不抛异常）。
+
+    用于周期完成事件上报：工位信息 + CT + 各步耗时。失败仅记录日志，不影响推理主流程。
+    """
+    try:
+        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return 200 <= resp.status < 300
+    except Exception:
+        return False

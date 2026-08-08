@@ -173,6 +173,7 @@ GUI 操作：
 | `site.factory / line / station / shift` | 顶部标题栏显示的工厂/产线/工位/班次 |
 | `video.default_source` | 启动时自动选中的视频源（`"0"`=默认摄像头，`"rtsp://..."`=RTSP，留空=手动选择） |
 | `video.rtsp_url` | RTSP 输入框的预填地址 |
+| `mes.enabled / url / token` | 周期完成事件上报到 MES/中央系统（HTTP POST JSON，Bearer Token 可选） |
 | `model.lstm_model / lstm_config` | LSTM 模型权重与配置路径 |
 | `inference.lstm_conf_default` | LSTM 阈值输入框默认值 |
 | `inference.confirm_frames / step_timeout_sec / step_min_stage_sec` | 命中确认帧数、步骤超时、最小步骤持续时间 |
@@ -281,6 +282,24 @@ python report.py --run-dir runs_gui/xxx  # 只看某一次运行
 ```
 
 输出 `production_report.html`：概览卡片（平均CT/完成周期/步骤完成率/超时数）、CT 趋势折线、瓶颈步骤分析（各步平均耗时与超时次数）。纯 HTML+SVG，无外部依赖，可直接用浏览器打开。
+
+### MES / 中央系统对接
+
+在 `config.json` 配置 `mes` 后，每个周期完成时系统会自动 POST 一条 JSON 到 MES：
+
+```json
+{
+  "event_type": "cycle_completed",
+  "cycle": 3,
+  "cycle_time_sec": 12.5,
+  "steps": [{"index": 1, "fine_label": "D1_pick_material", "duration_sec": 3.2, "status": "完成"}],
+  "site": {"factory": "...", "line": "...", "station": "..."},
+  "video": "camera0",
+  "reported_at": "2026-08-08 18:30:00"
+}
+```
+
+上报失败不影响本地推理，仅打印日志。
 
 ---
 
