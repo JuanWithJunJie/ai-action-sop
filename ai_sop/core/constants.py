@@ -33,6 +33,9 @@ LSTM_MODEL_PATH = _cfg_path("lstm_model", "lstm_runs_fine/best_lstm_fine.pt")
 LSTM_CONFIG_PATH = _cfg_path("lstm_config", "lstm_runs_fine/config.json")
 RUNS_GUI_DIR = BASE_DIR / "runs_gui"
 UI_BG_PATH = BASE_DIR / "背景图片.jpg"
+PENDING_DIR = BASE_DIR / "train_data" / "pending_samples"   # 误判样本沉淀目录（超时自动 + 手动标记）
+PENDING_FEATURES_DIR = PENDING_DIR / "features"              # 沉淀的 48 帧特征 .npy
+PENDING_LABELS_CSV = PENDING_DIR / "pending_labels.csv"      # 沉淀样本标注（回灌 ingest_pending.py 用）
 
 # ===== 推理核心常量 =====
 SOURCE_WINDOWS = [48, 72, 96]                          # 多尺度时序窗口：短=响应快、长=更稳，三者投票融合

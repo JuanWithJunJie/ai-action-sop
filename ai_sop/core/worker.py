@@ -23,6 +23,8 @@ from ai_sop.core.constants import (
     LSTM_CONFIG_PATH,
     LSTM_MODEL_PATH,
     MAX_RECONNECT_ATTEMPTS,
+    PENDING_FEATURES_DIR,
+    PENDING_LABELS_CSV,
     RECONNECT_DELAY_SEC,
     RUNS_GUI_DIR,
     SOURCE_WINDOWS,
@@ -195,6 +197,36 @@ class InferenceWorker(QThread):
                 return new_cap
         return None
 
+    def save_pending_sample(self, action_label: str, t_sec: float):
+        """把当前特征缓冲（最近 48 帧）保存为待回灌训练样本。
+
+        - 特征：train_data/pending_samples/features/<时间戳>_<标签>.npy
+        - 标注：追加到 pending_labels.csv，供 ingest_pending.py 回灌训练
+        """
+        q = getattr(self, "feat_queue", None)
+        if q is None or len(q) < min(SOURCE_WINDOWS):
+            return
+        PENDING_FEATURES_DIR.mkdir(parents=True, exist_ok=True)
+        feat_arr = np.stack(list(q)[-min(SOURCE_WINDOWS):], axis=0)
+        fname = f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{action_label.replace('/', '_')}.npy"
+        np.save(PENDING_FEATURES_DIR / fname, feat_arr)
+        with PENDING_LABELS_CSV.open("a", newline="", encoding="utf-8-sig") as f:
+            writer = csv.writer(f)
+            if PENDING_LABELS_CSV.stat().st_size == 0:
+                writer.writerow(["source", "action_label", "time_sec", "saved_at", "file"])
+            writer.writerow([
+                self.video_source, action_label, round(t_sec, 3),
+                datetime.now().isoformat(timespec="seconds"), fname,
+            ])
+
+    def mark_current_sample(self):
+        """GUI「标记样本」按钮：把当前期望动作的特征样本存为待回灌训练样本。"""
+        if self.expected_idx < len(self.actions):
+            label = self.actions[self.expected_idx].fine_label
+            self.save_pending_sample(label, getattr(self, "_last_t_sec", 0.0))
+            return label
+        return None
+
     def _calc_expected_conf(self, probs: torch.Tensor, expected_label: str) -> float:
         """取「期望步骤」对应的概率值（不取 argmax）。
 
@@ -268,7 +300,8 @@ class InferenceWorker(QThread):
 
             fps = cap.get(cv2.CAP_PROP_FPS) or 30.0   # 视频帧率；读取失败或为 0 时兜底用 30（t_sec = frame_id/fps 算时间戳用）
             frame_id = 0                              # 帧计数器：每读一帧 +1，既算时间戳也用于 UI 显示
-            feat_queue = deque(maxlen=max(SOURCE_WINDOWS))  # 特征缓冲队列，最多存 96 帧（够最长窗口 96）
+            self.feat_queue = deque(maxlen=max(SOURCE_WINDOWS))  # 特征缓冲队列，最多存 96 帧（够最长窗口 96）
+            feat_queue = self.feat_queue
             pred_history = deque(maxlen=5)                  # 最近 5 帧预测历史，用于第二层时间平滑（多数票去抖）
             current_pred = "background"                     # 当前预测动作初始值，特征攒够 48 帧前一直显示"背景"
 
@@ -297,6 +330,7 @@ class InferenceWorker(QThread):
 
                 # t_sec：文件用帧号/fps（回放时间与录制一致）；实时源用墙钟流逝（从打开源开始算）
                 t_sec = (time.monotonic() - live_t0) if live_t0 is not None else frame_id / fps
+                self._last_t_sec = t_sec        # 供「标记样本」按钮记录当前时刻
                 # === ② MediaPipe + ③ 拼 126 维特征并入队 ===
                 vis, hands_out = self._detect_frame(frame)   # MediaPipe 手部关键点（vis=带渲染的画面）
                 feat_queue.append(build_feature_row(hands_out))  # 拼成 126 维特征行并入缓冲队列
@@ -522,6 +556,7 @@ class InferenceWorker(QThread):
 
     def _timeout_action(self, expected_action, t_sec):
         """分支 B：超时跳过 → 事件 + 信号 + 推进 + 多周期重置。"""
+        self.save_pending_sample(expected_action.fine_label, t_sec)   # 超时样本自动沉淀，供回灌训练提升召回
         duration_sec = round(t_sec - (expected_action.start_time_sec or self.expected_stage_start_sec), 3)
         expected_action.duration_sec = duration_sec
         done_time_beijing = to_beijing_time_str()

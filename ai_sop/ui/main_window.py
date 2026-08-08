@@ -479,12 +479,14 @@ class MainWindow(QMainWindow):
         self.btn_pause = QPushButton("暂停/继续")
         self.btn_stop = QPushButton("停止")
         self.btn_export = QPushButton("导出结果")
+        self.btn_mark = QPushButton("标记样本")
         f_layout.addWidget(self.btn_import)
         f_layout.addWidget(self.btn_camera)
         f_layout.addWidget(self.btn_start)
         f_layout.addWidget(self.btn_pause)
         f_layout.addWidget(self.btn_stop)
         f_layout.addWidget(self.btn_export)
+        f_layout.addWidget(self.btn_mark)
 
         f_layout.addStretch()
 
@@ -520,6 +522,7 @@ class MainWindow(QMainWindow):
         self.btn_pause.clicked.connect(self.on_pause)
         self.btn_stop.clicked.connect(self.on_stop)
         self.btn_export.clicked.connect(self.on_export)
+        self.btn_mark.clicked.connect(self.on_mark_sample)
 
     def _toggle_max(self):
         """切换最大化 / 还原（标题栏按钮触发）。"""
@@ -684,6 +687,17 @@ class MainWindow(QMainWindow):
             shutil.rmtree(out)
         shutil.copytree(self.last_run_dir, out)
         show_message(self, "info", "导出完成", f"已导出到: {out}")
+
+    def on_mark_sample(self):
+        """「标记样本」按钮槽：保存当前期望动作的特征样本（供回灌训练）。"""
+        if not (self.worker and self.worker.isRunning()):
+            show_message(self, "info", "提示", "请先开始分析")
+            return
+        label = self.worker.mark_current_sample()
+        if label:
+            show_message(self, "info", "样本已保存", f"已保存 {label} 的特征样本到 train_data/pending_samples/")
+        else:
+            show_message(self, "warning", "提示", "当前无期望动作可标记")
 
     def _set_video_preview_pixmap(self, pix: QPixmap):
         """把 QPixmap 按比例缩放到 video_label 尺寸并显示（导入视频时显示首帧）。"""

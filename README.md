@@ -107,6 +107,7 @@ PyQt5==5.15.10
 ├── extract_features.py        # 特征提取：视频 → 126维 .npy
 ├── train_lstm.py              # LSTM 训练：数据增强 + 类别权重 + 训练
 ├── auto_label.py              # 自动伪标注：KNN 相似度给未标注区间打标签
+├── ingest_pending.py          # 误判样本回灌：pending_samples → 训练数据
 ├── requirements.txt           # Python 依赖
 ├── start.sh                   # Linux 一键启动脚本
 ├── build.bat                  # Windows PyInstaller 打包脚本
@@ -121,6 +122,7 @@ PyQt5==5.15.10
 ├── train_data/                # 训练数据
 │   ├── timeline.csv           # 动作时间标注
 │   ├── timeline_auto.csv      # 自动伪标注结果
+│   ├── pending_samples/       # 误判样本沉淀（超时自动 + 手动标记）
 │   └── features/              # 提取的 .npy 特征文件（运行时生成，已 gitignore）
 │
 ├── LICENSE
@@ -158,6 +160,7 @@ GUI 操作：
 2. 调整 LSTM 阈值（默认 0.15）
 3. 点击「开始分析」启动实时推理
 4. 步骤完成后自动在卡片中显示截图
+5. 发现误判时点击「标记样本」，把当前画面特征保存为待回灌训练样本
 
 ### 3. 配置（config.json）
 
@@ -226,6 +229,17 @@ python auto_label.py
 输出 `train_data/timeline_auto.csv`。
 
 > 训练脚本固定读取 `train_data/timeline.csv`。如采用自动标注结果，请将 `timeline_auto.csv` 的内容合并或替换到 `timeline.csv`。
+
+### Step 4.5：误判样本沉淀与回灌（数据闭环）
+
+系统会自动把「超时跳过」的步骤保存为待回灌样本；运行中也可手动点击 GUI 的「标记样本」按钮把当前画面保存为当前期望动作的样本。沉淀样本位于 `train_data/pending_samples/`。
+
+定期执行回灌，把误判样本并入训练集：
+
+```bash
+python ingest_pending.py            # 回灌特征 + 追加 timeline 标注
+python ingest_pending.py --clean    # 回灌后清空沉淀目录
+```
 
 ### Step 5：训练 LSTM
 
