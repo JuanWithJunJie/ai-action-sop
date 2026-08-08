@@ -109,6 +109,8 @@ PyQt5==5.15.10
 ├── auto_label.py              # 自动伪标注：KNN 相似度给未标注区间打标签
 ├── requirements.txt           # Python 依赖
 ├── start.sh                   # Linux 一键启动脚本
+├── build.bat                  # Windows PyInstaller 打包脚本
+├── config.json                # 站点/视频源/模型/推理参数配置
 ├── .gitignore
 │
 ├── video/                     # 测试视频（需自行创建，已 gitignore）
@@ -152,12 +154,33 @@ python ai_sop_gui.py
 > 也可用 `python -m ai_sop` 启动（两者等价）。
 
 GUI 操作：
-1. 点击「导入视频」选择 `.mp4` 文件
+1. 选择视频源：点击「导入视频」选 `.mp4` 文件 / 点击「摄像头」用 USB 摄像头（索引 0）/ 输入 RTSP 地址后点击「连接RTSP」
 2. 调整 LSTM 阈值（默认 0.15）
 3. 点击「开始分析」启动实时推理
 4. 步骤完成后自动在卡片中显示截图
 
-### 3. 训练自定义动作（可选）
+### 3. 配置（config.json）
+
+`config.json` 可覆盖默认参数，无需改代码：
+
+| 配置项 | 说明 |
+|--------|------|
+| `site.factory / line / station / shift` | 顶部标题栏显示的工厂/产线/工位/班次 |
+| `video.default_source` | 启动时自动选中的视频源（`"0"`=默认摄像头，`"rtsp://..."`=RTSP，留空=手动选择） |
+| `video.rtsp_url` | RTSP 输入框的预填地址 |
+| `model.lstm_model / lstm_config` | LSTM 模型权重与配置路径 |
+| `inference.lstm_conf_default` | LSTM 阈值输入框默认值 |
+| `inference.confirm_frames / step_timeout_sec / step_min_stage_sec` | 命中确认帧数、步骤超时、最小步骤持续时间 |
+
+### 4. 打包发布（Windows）
+
+```bash
+build.bat
+```
+
+产出 `dist\AI-SOP-Vision\AI-SOP-Vision.exe`，连同整个 `dist\AI-SOP-Vision\` 目录一起分发即可（内含模型与配置文件）。
+
+### 5. 训练自定义动作（可选）
 
 如果默认模型效果不理想，可重新训练，详见下文「训练流程」章节。
 

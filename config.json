@@ -1,0 +1,22 @@
+{
+  "site": {
+    "factory": "深圳智造工厂",
+    "line": "A线·手机组装",
+    "station": "W-07 镜面贴合",
+    "shift": "白班 A组"
+  },
+  "video": {
+    "default_source": "",
+    "rtsp_url": ""
+  },
+  "model": {
+    "lstm_model": "lstm_runs_fine/best_lstm_fine.pt",
+    "lstm_config": "lstm_runs_fine/config.json"
+  },
+  "inference": {
+    "lstm_conf_default": 0.15,
+    "confirm_frames": 4,
+    "step_timeout_sec": 6.0,
+    "step_min_stage_sec": 0.8
+  }
+}

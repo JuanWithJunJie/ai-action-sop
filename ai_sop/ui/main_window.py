@@ -27,8 +27,12 @@ from PyQt5.QtWidgets import (
 from ai_sop.core.constants import (
     BASE_DIR,
     CONFIRM_FRAMES_FIXED,
+    DEFAULT_RTSP_URL,
+    DEFAULT_VIDEO_SOURCE,
     F_DISPLAY,
     F_MONO,
+    LSTM_CONF_DEFAULT,
+    SITE_INFO,
     C_BG_PRIMARY,
     C_BG_VIDEO_DARK,
     C_BG_VIDEO_DIM,
@@ -85,6 +89,14 @@ class MainWindow(QMainWindow):
         self._apply_theme()
         self._build_ui()
         self._apply_font_scale(1.0)
+
+        # 启动时若配置了默认视频源（摄像头/RTSP），自动选中
+        if DEFAULT_VIDEO_SOURCE:
+            self.video_source = DEFAULT_VIDEO_SOURCE
+            if DEFAULT_VIDEO_SOURCE.isdigit():
+                self.video_label.setText(f"摄像头 {DEFAULT_VIDEO_SOURCE} 已就绪，点击「开始分析」")
+            else:
+                self.video_label.setText(f"RTSP: {DEFAULT_VIDEO_SOURCE}")
 
         # 1 秒一次的时钟刷新（标题栏显示当前时间）
         self.clock_timer = QTimer(self)
@@ -169,7 +181,12 @@ class MainWindow(QMainWindow):
 
         h_layout.addSpacing(30)
 
-        for label, value in [("工厂", "深圳智造工厂"), ("产线", "A线·手机组装"), ("工位", "W-07 镜面贴合"), ("班次", "白班 A组")]:
+        for label, value in [
+            ("工厂", SITE_INFO["factory"]),
+            ("产线", SITE_INFO["line"]),
+            ("工位", SITE_INFO["station"]),
+            ("班次", SITE_INFO["shift"]),
+        ]:
             info = QVBoxLayout()
             info.setSpacing(1)
             lbl_l = QLabel(label)
@@ -468,7 +485,7 @@ class MainWindow(QMainWindow):
 
         f_layout.addStretch()
 
-        self.edit_rtsp = QLineEdit("")
+        self.edit_rtsp = QLineEdit(DEFAULT_RTSP_URL)
         self.edit_rtsp.setPlaceholderText("RTSP 地址 (rtsp://...)")
         self.edit_rtsp.setFixedWidth(230)
         self.btn_rtsp = QPushButton("连接RTSP")
@@ -476,7 +493,7 @@ class MainWindow(QMainWindow):
         f_layout.addWidget(self.btn_rtsp)
         f_layout.addSpacing(10)
 
-        self.edit_lstm = QLineEdit("0.15")
+        self.edit_lstm = QLineEdit(str(LSTM_CONF_DEFAULT))
 
         f_layout.addWidget(QLabel("LSTM阈值"))
         f_layout.addWidget(self.edit_lstm)

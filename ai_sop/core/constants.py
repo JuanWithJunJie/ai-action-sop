@@ -1,4 +1,5 @@
 """路径 + 全局常量。被所有模块依赖。"""
+import json
 from pathlib import Path
 
 from ai_sop.theme import COLORS, FONTS
@@ -6,17 +7,53 @@ from ai_sop.theme import COLORS, FONTS
 # ===== 路径 =====
 # constants.py 在 ai_sop/core/，需上溯 3 层到项目根
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
+CONFIG_PATH = BASE_DIR / "config.json"
+
+
+def _load_config() -> dict:
+    """读取 config.json（不存在或损坏时返回空 dict，全部走默认值）。"""
+    if CONFIG_PATH.exists():
+        try:
+            return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+
+CONFIG = _load_config()
+
+
+def _cfg_path(key: str, default: str) -> Path:
+    """从 CONFIG.model 取相对路径并拼到项目根。"""
+    return BASE_DIR / CONFIG.get("model", {}).get(key, default)
+
+
 TIMELINE_CSV = BASE_DIR / "full_timeline_10videos_template.csv"
-LSTM_MODEL_PATH = BASE_DIR / "lstm_runs_fine/best_lstm_fine.pt"
-LSTM_CONFIG_PATH = BASE_DIR / "lstm_runs_fine/config.json"
+LSTM_MODEL_PATH = _cfg_path("lstm_model", "lstm_runs_fine/best_lstm_fine.pt")
+LSTM_CONFIG_PATH = _cfg_path("lstm_config", "lstm_runs_fine/config.json")
 RUNS_GUI_DIR = BASE_DIR / "runs_gui"
 UI_BG_PATH = BASE_DIR / "背景图片.jpg"
 
 # ===== 推理核心常量 =====
 SOURCE_WINDOWS = [48, 72, 96]                          # 多尺度时序窗口：短=响应快、长=更稳，三者投票融合
-CONFIRM_FRAMES_FIXED = 4                              # 命中确认帧数：连续 N 帧达标才算步骤完成（反单帧误触）
-STEP_TIMEOUT_SEC = 6.0                                # 步骤超时：某步 6 秒未完成则强制跳过，避免卡住产线
-STEP_MIN_STAGE_SEC = 0.8                             # 步骤最小持续时间：切换后 0.8 秒内强制置信度=0（防尾巴误判）
+_INF = CONFIG.get("inference", {})
+CONFIRM_FRAMES_FIXED = int(_INF.get("confirm_frames", 4))          # 命中确认帧数：连续 N 帧达标才算步骤完成
+STEP_TIMEOUT_SEC = float(_INF.get("step_timeout_sec", 6.0))        # 步骤超时：某步 N 秒未完成则强制跳过
+STEP_MIN_STAGE_SEC = float(_INF.get("step_min_stage_sec", 0.8))    # 步骤最小持续时间（防尾巴误判）
+LSTM_CONF_DEFAULT = float(_INF.get("lstm_conf_default", 0.15))     # GUI 阈值输入框默认值
+
+# ===== 工位信息（config.json 可覆盖）=====
+_SITE = CONFIG.get("site", {})
+SITE_INFO = {
+    "factory": _SITE.get("factory", "深圳智造工厂"),
+    "line": _SITE.get("line", "A线·手机组装"),
+    "station": _SITE.get("station", "W-07 镜面贴合"),
+    "shift": _SITE.get("shift", "白班 A组"),
+}
+
+# ===== 视频源默认值（config.json 可覆盖）=====
+DEFAULT_VIDEO_SOURCE = CONFIG.get("video", {}).get("default_source", "")
+DEFAULT_RTSP_URL = CONFIG.get("video", {}).get("rtsp_url", "")
 
 HAND_LANDMARK_THICKNESS = 4
 HAND_CONNECTION_THICKNESS = 4
