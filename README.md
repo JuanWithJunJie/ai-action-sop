@@ -109,6 +109,7 @@ PyQt5==5.15.10
 ├── auto_label.py              # 自动伪标注：KNN 相似度给未标注区间打标签
 ├── ingest_pending.py          # 误判样本回灌：pending_samples → 训练数据
 ├── evaluate.py                # 批量评估：视频推理准确率 / 周期CT报告
+├── report.py                  # HTML 生产报表：CT趋势 / 瓶颈步骤 / 完成率
 ├── requirements.txt           # Python 依赖
 ├── start.sh                   # Linux 一键启动脚本
 ├── build.bat                  # Windows PyInstaller 打包脚本
@@ -271,6 +272,15 @@ python evaluate.py --video-dir D:/videos    # 指定视频目录
 ```
 
 输出 `evaluate_report.json`：每个视频的完成/超时/准确率/周期CT，以及整体准确率与平均CT。
+
+### 生产报表
+
+```bash
+python report.py                         # 聚合 runs_gui/ 全部结果生成报表
+python report.py --run-dir runs_gui/xxx  # 只看某一次运行
+```
+
+输出 `production_report.html`：概览卡片（平均CT/完成周期/步骤完成率/超时数）、CT 趋势折线、瓶颈步骤分析（各步平均耗时与超时次数）。纯 HTML+SVG，无外部依赖，可直接用浏览器打开。
 
 ---
 
