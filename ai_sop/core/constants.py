@@ -47,6 +47,7 @@ LSTM_CONF_DEFAULT = float(_INF.get("lstm_conf_default", 0.15))     # GUI 阈值�
 MAX_RECONNECT_ATTEMPTS = int(_INF.get("max_reconnect_attempts", 5))  # 实时源断线最大重连次数
 RECONNECT_DELAY_SEC = float(_INF.get("reconnect_delay_sec", 2.0))   # 每次重连间隔（秒）
 WATCHDOG_TIMEOUT_SEC = float(_INF.get("watchdog_timeout_sec", 8.0)) # 推理无心跳判定异常的超时（秒）
+SLOW_RATIO_THRESHOLD = float(_INF.get("slow_ratio_threshold", 1.5)) # 步骤耗时超过该动作平均耗时的倍数 → 标记「偏慢」
 
 # ===== 工位信息（config.json 可覆盖）=====
 _SITE = CONFIG.get("site", {})

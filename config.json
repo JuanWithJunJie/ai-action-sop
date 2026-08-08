@@ -20,6 +20,7 @@
     "step_min_stage_sec": 0.8,
     "max_reconnect_attempts": 5,
     "reconnect_delay_sec": 2.0,
-    "watchdog_timeout_sec": 8.0
+    "watchdog_timeout_sec": 8.0,
+    "slow_ratio_threshold": 1.5
   }
 }

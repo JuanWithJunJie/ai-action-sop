@@ -27,6 +27,7 @@ from ai_sop.core.constants import (
     PENDING_LABELS_CSV,
     RECONNECT_DELAY_SEC,
     RUNS_GUI_DIR,
+    SLOW_RATIO_THRESHOLD,
     SOURCE_WINDOWS,
     STEP_MIN_STAGE_SEC,
     STEP_TIMEOUT_SEC,
@@ -91,6 +92,7 @@ class InferenceWorker(QThread):
         self.cycle_start_sec: Optional[float] = None       # 当前周期开始时间（D1 进入时记录，用于算 CT）
         self.cycle_start_beijing: Optional[str] = None     # 当前周期开始时间（北京时间）
         self.cycle_times_sec: List[float] = []             # 已完成的周期 CT（Cycle Time）列表
+        self.action_durations: Dict[str, List[float]] = {} # 各动作的历史耗时（跨周期累计，用于偏慢判定基准）
 
         self.run_dir: Optional[Path] = None
         self.events: List[dict] = []                       # 事件日志（每步骤完成/超时记一条）
@@ -516,6 +518,11 @@ class InferenceWorker(QThread):
         expected_action.done_time_sec = t_sec
         duration_sec = round(t_sec - (expected_action.start_time_sec or self.expected_stage_start_sec), 3)
         expected_action.duration_sec = duration_sec
+        # 偏慢判定：耗时超过该动作历史平均耗时的 SLOW_RATIO_THRESHOLD 倍（需至少 2 个历史样本）
+        hist = self.action_durations.setdefault(expected_action.fine_label, [])
+        is_slow = len(hist) >= 2 and duration_sec > (sum(hist) / len(hist)) * SLOW_RATIO_THRESHOLD
+        hist.append(duration_sec)
+        quality = "slow" if is_slow else "normal"
 
         if self.params.save_snapshots:
             expected_action.snapshot_path = self._save_snapshot(vis, expected_action, t_sec)
@@ -533,6 +540,7 @@ class InferenceWorker(QThread):
                 "done_time_sec": round(t_sec, 3),
                 "done_time_beijing": done_time_beijing,
                 "snapshot_path": expected_action.snapshot_path or "",
+                "quality": quality,
                 "status": "完成",
             }
         )
@@ -541,8 +549,10 @@ class InferenceWorker(QThread):
             {
                 "index": expected_action.index,
                 "status": "完成",
-                "info": f"耗时 {duration_sec:.2f}s",
+                "info": f"耗时 {duration_sec:.2f}s" + ("（偏慢）" if is_slow else ""),
                 "snapshot": expected_action.snapshot_path,
+                "duration_sec": duration_sec,
+                "quality": quality,
             }
         )
 
@@ -572,6 +582,7 @@ class InferenceWorker(QThread):
                 "done_time_sec": round(t_sec, 3),
                 "done_time_beijing": done_time_beijing,
                 "snapshot_path": "",
+                "quality": "timeout",
                 "status": "超时跳过",
             }
         )
@@ -582,6 +593,8 @@ class InferenceWorker(QThread):
                 "status": "超时跳过",
                 "info": f"超时 {duration_sec:.2f}s",
                 "snapshot": None,
+                "duration_sec": duration_sec,
+                "quality": "timeout",
             }
         )
 

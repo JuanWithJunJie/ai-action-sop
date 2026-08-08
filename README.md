@@ -176,6 +176,7 @@ GUI 操作：
 | `inference.confirm_frames / step_timeout_sec / step_min_stage_sec` | 命中确认帧数、步骤超时、最小步骤持续时间 |
 | `inference.max_reconnect_attempts / reconnect_delay_sec` | 实时源（摄像头/RTSP）断线后的最大重连次数与间隔 |
 | `inference.watchdog_timeout_sec` | 推理无心跳判定异常的超时（秒），超时后顶部状态栏提示「推理异常」 |
+| `inference.slow_ratio_threshold` | 步骤耗时超过该动作平均耗时的倍数 → 标记「偏慢」 |
 
 ### 4. 打包发布（Windows）
 
@@ -295,6 +296,9 @@ D1→D2→D3→D4 全部完成后自动重置，开始下一轮检测，支持�
 - **周期 CT**：同一周期内 D4 完成时间 − D1 开始时间（四步连续推进，无间隙），每轮完成时在右侧统计面板更新「CT / 均CT」，并在事件流中追加「周期完成」记录
 - **超时跳过**：按实际耗时计入（约 6s），不影响周期 CT 汇总
 - **日志**：`events.csv` 增加 `start_time_sec / duration_sec / start_time_beijing / cycle_time_sec` 列；`result.json` 增加 `cycle_times_sec`、`avg_cycle_time_sec`
+
+### 质量判定（偏慢提示）
+系统跨周期累计每个动作的历史耗时，当某步骤耗时超过该动作平均耗时的 `slow_ratio_threshold`（默认 1.5 倍）时，标记为「偏慢」并在步骤卡片与事件流中提示；超时跳过默认视为异常（`quality=timeout`）。判定结果同时写入 `events.csv` 的 `quality` 列，供报表与复盘使用。
 
 ### 字体自适应
 GUI 根据窗口大小自动缩放字体，最大化后文字自动放大，适配不同分辨率屏幕。

@@ -900,7 +900,13 @@ class MainWindow(QMainWindow):
 
         if idx < len(self.cards):
             step = self.cards[idx]
-            time_str = datetime.now().strftime("%H:%M:%S")
+            dur = ev.get("duration_sec")
+            if dur is not None:
+                time_str = f"耗时 {dur:.2f}s"
+                if ev.get("quality") == "slow":
+                    time_str += " · 偏慢"
+            else:
+                time_str = datetime.now().strftime("%H:%M:%S")
             self._add_event(step.name, "done" if status == "完成" else "skip",
                            int(self.lbl_cycle.text()), time_str)
 
