@@ -1,5 +1,5 @@
 {
-  "input_size": 146,
+  "input_size": 126,
   "hidden_size": 128,
   "num_layers": 2,
   "num_classes": 5,

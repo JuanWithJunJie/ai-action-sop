@@ -7,23 +7,17 @@ from ai_sop.theme import COLORS, FONTS
 # constants.py 在 ai_sop/core/，需上溯 3 层到项目根
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 TIMELINE_CSV = BASE_DIR / "full_timeline_10videos_template.csv"
-YOLO_MODEL_PATH = BASE_DIR / "runs_detect/yolov8s_mirror_v14_no_earlystop/weights/best.pt"
 LSTM_MODEL_PATH = BASE_DIR / "lstm_runs_fine/best_lstm_fine.pt"
 LSTM_CONFIG_PATH = BASE_DIR / "lstm_runs_fine/config.json"
 RUNS_GUI_DIR = BASE_DIR / "runs_gui"
 UI_BG_PATH = BASE_DIR / "背景图片.jpg"
 
 # ===== 推理核心常量 =====
-CLASS_NAMES = ["base", "frame", "mirror", "screw"]   # YOLO 检测的 4 类物体
 SOURCE_WINDOWS = [48, 72, 96]                          # 多尺度时序窗口：短=响应快、长=更稳，三者投票融合
 CONFIRM_FRAMES_FIXED = 4                              # 命中确认帧数：连续 N 帧达标才算步骤完成（反单帧误触）
 STEP_TIMEOUT_SEC = 6.0                                # 步骤超时：某步 6 秒未完成则强制跳过，避免卡住产线
 STEP_MIN_STAGE_SEC = 0.8                             # 步骤最小持续时间：切换后 0.8 秒内强制置信度=0（防尾巴误判）
 
-# ===== YOLO 可视化样式 =====
-YOLO_BOX_THICKNESS = 3
-YOLO_TEXT_SIZE = 38
-YOLO_TEXT_OFFSET_Y = 36
 HAND_LANDMARK_THICKNESS = 4
 HAND_CONNECTION_THICKNESS = 4
 HAND_CIRCLE_RADIUS = 5
@@ -42,12 +36,6 @@ ACTION_CN_MAP = {                                     # LSTM 输出标签 → �
     "D3_inspect": "检测",
     "D4_place_material": "放料",
     "background": "背景",
-}
-YOLO_CN_MAP = {                                        # YOLO 输出类别 → 中文显示名
-    "base": "底座",
-    "frame": "骨架",
-    "mirror": "镜面",
-    "screw": "螺丝",
 }
 
 # ===== 主题色快捷引用（详见 theme.py）—— 用于 f-string 内的 QSS 颜色插值 =====

@@ -8,10 +8,8 @@ import torch
 @dataclass
 class RuntimeParams:
     """推理运行时参数（由 GUI 控件传入）。"""
-    yolo_conf: float       # YOLO 检测最小置信度
     lstm_conf: float       # LSTM 动作确认阈值：期望动作概率 ≥ 该值算 1 次命中
     confirm_frames: int   # 连续命中多少帧才算步骤完成
-    show_boxes: bool      # 是否在画面上绘制 YOLO 检测框
     show_keypoints: bool  # 是否在画面上绘制 MediaPipe 手部关键点
     save_snapshots: bool  # 步骤完成时是否截图留档
     save_log: bool        # 是否导出 result.json + events.csv
@@ -31,10 +29,10 @@ class ActionRuntime:
 
 
 class ActionLSTM(torch.nn.Module):
-    """动作分类 LSTM：输入 (B, T=48, 146)，输出 (B, num_classes) 的 logits。
+    """动作分类 LSTM：输入 (B, T=48, 126)，输出 (B, num_classes) 的 logits。
 
     many-to-one 结构：取 LSTM 最后一个时间步的隐状态过 Linear 分类。
-    146 维输入 = YOLO(4类×5值=20) + MediaPipe(2手×21点×3坐标=126)。
+    126 维输入 = MediaPipe(2手×21点×3坐标=126)。
     """
 
     def __init__(self, input_size, hidden_size, num_layers, num_classes, dropout=0.2):

@@ -1,5 +1,5 @@
 """
-特征提取脚本：从视频中逐帧提取 146 维特征（YOLO 检测 + MediaPipe 手关键点），
+特征提取脚本：从视频中逐帧提取 126 维特征（MediaPipe 手关键点），
 保存为 .npy 文件供 LSTM 训练使用。
 
 用法:
@@ -15,8 +15,6 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-import torch
-from ultralytics import YOLO
 
 try:
     import mediapipe as mp
@@ -26,24 +24,14 @@ except Exception as e:
 
 from ai_sop_gui import (
     BASE_DIR,
-    YOLO_MODEL_PATH,
     build_feature_row,
 )
 
 OUTPUT_DIR = BASE_DIR / "train_data" / "features"
 
 
-def _select_device() -> str:
-    """推理设备：CUDA > MPS(Apple Silicon) > CPU。"""
-    if torch.cuda.is_available():
-        return "cuda:0"
-    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        return "mps"
-    return "cpu"
-
-
-def extract_video(video_path: Path, yolo: YOLO, hands, device: str):
-    """对单个视频逐帧提取 146 维特征，保存为 train_data/features/<视频名>.npy。
+def extract_video(video_path: Path, hands):
+    """对单个视频逐帧提取 126 维特征，保存为 train_data/features/<视频名>.npy。
 
     与 ai_sop_gui.py 的 build_feature_row() 共享同一特征定义 —— 训练/推理一致性关键。
     返回输出 .npy 路径；视频无法打开时返回 None。
@@ -64,21 +52,6 @@ def extract_video(video_path: Path, yolo: YOLO, hands, device: str):
         if not ok:
             break
 
-        h, w = frame.shape[:2]
-        # conf 与 GUI 默认 0.30 保持一致，避免训练-推理特征分布偏移
-        res = yolo.predict(frame, verbose=False, conf=0.30, device=device)[0]
-
-        detections = []
-        if res.boxes is not None:
-            for box in res.boxes:
-                cls_id = int(box.cls[0])
-                x1, y1, x2, y2 = map(float, box.xyxy[0].tolist())
-                detections.append({
-                    "cls_name": yolo.names.get(cls_id, str(cls_id)),
-                    "conf": float(box.conf[0]),
-                    "xyxy": [x1, y1, x2, y2],
-                })
-
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         hr = hands.process(rgb)
         hands_out = []
@@ -87,7 +60,7 @@ def extract_video(video_path: Path, yolo: YOLO, hands, device: str):
                 lms = [[float(lm.x), float(lm.y), float(lm.z)] for lm in hand_lm.landmark]
                 hands_out.append({"hand_index": hidx, "landmarks": lms})
 
-        feat = build_feature_row(detections, hands_out, w, h)
+        feat = build_feature_row(hands_out)
         feats.append(feat)
 
         frame_id += 1
@@ -113,12 +86,6 @@ def main():
     parser.add_argument("--video_dir", type=str, help="视频目录（默认 video/）")
     args = parser.parse_args()
 
-    device = _select_device()
-    print(f"设备: {device}")
-
-    print(f"加载 YOLO 模型: {YOLO_MODEL_PATH}")
-    yolo = YOLO(str(YOLO_MODEL_PATH))
-
     hands = mp_hands.Hands(
         static_image_mode=False,
         max_num_hands=2,
@@ -135,7 +102,7 @@ def main():
 
     print(f"共 {len(videos)} 个视频待处理\n")
     for v in videos:
-        extract_video(v, yolo, hands, device)
+        extract_video(v, hands)
 
     hands.close()
     print(f"\n完成！特征文件保存在: {OUTPUT_DIR}")

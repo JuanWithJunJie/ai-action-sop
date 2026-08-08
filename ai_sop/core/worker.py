@@ -1,4 +1,4 @@
-"""推理 Worker —— QThread 子类，跑 YOLO + MediaPipe + LSTM + 顺序状态机。"""
+"""推理 Worker —— QThread 子类，跑 MediaPipe + LSTM + 顺序状态机。"""
 import csv
 import json
 from collections import deque
@@ -12,7 +12,6 @@ import pandas as pd
 import torch
 from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5.QtGui import QImage
-from ultralytics import YOLO
 
 from ai_sop.core.constants import (
     ACTION_CN_MAP,
@@ -27,9 +26,8 @@ from ai_sop.core.constants import (
     STEP_MIN_STAGE_SEC,
     STEP_TIMEOUT_SEC,
     TIMELINE_CSV,
-    YOLO_MODEL_PATH,
 )
-from ai_sop.core.features import build_feature_row, draw_yolo_boxes_cn
+from ai_sop.core.features import build_feature_row
 from ai_sop.core.models import ActionLSTM, ActionRuntime, RuntimeParams
 from ai_sop.core.utils import action_to_cn, bgr_to_qimage, fine_label_from_row, to_beijing_time_str
 
@@ -45,7 +43,7 @@ except Exception as e:
 class InferenceWorker(QThread):
     """推理 Worker 线程 —— QThread 子类。
 
-    主循环 run() 把 8 个阶段（暂停/读帧/YOLO/MediaPipe/拼特征/LSTM 投票/状态机/广播）
+    主循环 run() 把 7 个阶段（暂停/读帧/MediaPipe/拼特征/LSTM 投票/状态机/广播）
     拆成 5 个子方法，每阶段单一职责，便于调试。
     """
     sig_frame = pyqtSignal(QImage)
@@ -71,7 +69,6 @@ class InferenceWorker(QThread):
         self.label2id: Dict[str, int] = {}                # 标签名 → 类别 id（反查期望动作置信度用）
 
         self.lstm = None
-        self.yolo = None
         self.hands = None
 
         # === 顺序状态机变量 ===
@@ -94,7 +91,7 @@ class InferenceWorker(QThread):
         self._pause = not self._pause
 
     def _load_models(self):
-        """加载 LSTM / YOLO / MediaPipe 三个模型，并构建标签映射。"""
+        """加载 LSTM / MediaPipe 两个模型，并构建标签映射。"""
         config = json.loads(LSTM_CONFIG_PATH.read_text(encoding="utf-8"))
         self.id2label = {int(x["id"]): x["label"] for x in config["label_map"]}
         self.label2id = {v: k for k, v in self.id2label.items()}
@@ -108,7 +105,6 @@ class InferenceWorker(QThread):
         self.lstm.load_state_dict(torch.load(LSTM_MODEL_PATH, map_location=self.device))
         self.lstm.eval()
 
-        self.yolo = YOLO(str(YOLO_MODEL_PATH))
         # MediaPipe Hands：model_complexity=1 比 0 慢约 2 倍但更准；tracking 模式提升连续性
         self.hands = mp_hands.Hands(
             static_image_mode=False,
@@ -207,15 +203,16 @@ class InferenceWorker(QThread):
     def run(self):
         """推理主循环 —— QThread 入口。
 
-        每帧管线：读帧 → ②YOLO + ③MediaPipe → ④拼 146 维特征 →
-        ⑥多尺度窗口 LSTM 投票 → ⑦顺序状态机（命中确认/超时跳过/多周期循环）→ ⑧广播。
+        每帧管线：读帧 → ②MediaPipe → ③拼 126 维特征 →
+        ④多尺度窗口 LSTM 投票 → ⑤顺序状态机（命中确认/超时跳过/多周期循环）→ ⑥广播。
         各阶段实现见对应子方法。
         """
         try:
-            self._load_models()
-            self._build_actions()
-            self._init_run_dir()
+            self._load_models()    # ① 加载 LSTM / MediaPipe 两个模型并建标签映射
+            self._build_actions()  # ② 确定本次 SOP 步骤序列（优先 timeline.csv 标注，否则用默认 4 步）
+            self._init_run_dir()   # ③ 创建本次运行专属输出目录（截图/日志存放处）
 
+            # ④ 首条状态广播：把动作列表显示名 + 总数发给 UI，用于初始化步骤卡片
             self.sig_status.emit({"action_defs": [a.show for a in self.actions], "total": len(self.actions)})
 
             # === 视频源 + 帧级缓冲队列 ===
@@ -223,11 +220,11 @@ class InferenceWorker(QThread):
             if not cap.isOpened():
                 raise RuntimeError(f"无法打开视频: {self.video_path}")
 
-            fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-            frame_id = 0
-            feat_queue = deque(maxlen=max(SOURCE_WINDOWS))  # 96 帧特征缓冲（够最长窗口）
-            pred_history = deque(maxlen=5)                  # 最近 5 帧预测（第二层时间平滑）
-            current_pred = "background"
+            fps = cap.get(cv2.CAP_PROP_FPS) or 30.0   # 视频帧率；读取失败或为 0 时兜底用 30（t_sec = frame_id/fps 算时间戳用）
+            frame_id = 0                              # 帧计数器：每读一帧 +1，既算时间戳也用于 UI 显示
+            feat_queue = deque(maxlen=max(SOURCE_WINDOWS))  # 特征缓冲队列，最多存 96 帧（够最长窗口 96）
+            pred_history = deque(maxlen=5)                  # 最近 5 帧预测历史，用于第二层时间平滑（多数票去抖）
+            current_pred = "background"                     # 当前预测动作初始值，特征攒够 48 帧前一直显示"背景"
 
             while not self._stop:
                 # === ① 暂停时不读帧，避免 frame_id 推进与画面错位 ===
@@ -235,36 +232,36 @@ class InferenceWorker(QThread):
                     self.msleep(30)
                     continue
 
-                ok, frame = cap.read()
+                ok, frame = cap.read()  # 取一帧
                 if not ok:
                     break
 
                 # t_sec 用帧号/fps 算（不是墙钟），保证回放时间与录制时间一致
-                t_sec = frame_id / fps
-                frame_h, frame_w = frame.shape[:2]
+                t_sec = frame_id / fps          # 本帧在视频内的时间（秒）
+                # === ② MediaPipe + ③ 拼 126 维特征并入队 ===
+                vis, hands_out = self._detect_frame(frame)   # MediaPipe 手部关键点（vis=带渲染的画面）
+                feat_queue.append(build_feature_row(hands_out))  # 拼成 126 维特征行并入缓冲队列
 
-                # === ② YOLO + ③ MediaPipe + ④ 拼 146 维特征并入队 ===
-                vis, detections, hands_out = self._detect_frame(frame)
-                feat_queue.append(build_feature_row(detections, hands_out, frame_w, frame_h))
+                # === ④ 取当前期望步骤 + 步骤切换时间戳更新 ===
+                expected_show = "DONE"                  # 默认显示"DONE"：全部步骤走完后显示
+                expected_action = None                   # 默认无期望步骤
+                if self.expected_idx < len(self.actions):    # 还有未完成的步骤
+                    expected_action = self.actions[self.expected_idx]  # 取当前指针指向的步骤作为期望动作
+                    expected_show = expected_action.show            # 期望步骤的显示名
+                    if self.expected_idx != self.last_expected_idx: # 刚切换到新步骤（首次进入/上一步完成）
+                        self.expected_stage_start_sec = t_sec       # 记录本步骤开始时间（超时判断 + 最小持续用）
+                        self.last_expected_idx = self.expected_idx  # 更新标记，避免每帧重复记录
 
-                # === ⑤ 取当前期望步骤 + 步骤切换时间戳更新 ===
-                expected_show = "DONE"
-                expected_action = None
-                if self.expected_idx < len(self.actions):
-                    expected_action = self.actions[self.expected_idx]
-                    expected_show = expected_action.show
-                    if self.expected_idx != self.last_expected_idx:
-                        self.expected_stage_start_sec = t_sec
-                        self.last_expected_idx = self.expected_idx
-
-                # === ⑥ 多尺度窗口 LSTM 投票 ===
+                # === ⑤ 多尺度窗口 LSTM 投票：用特征缓冲跑 3 窗口 LSTM + 双轮多数票
+                # 输入：feat_queue特征缓冲 / pred_history近5帧预测历史 / current_pred当前预测动作 / expected_action当前期望步骤
                 current_pred, expected_conf, top3_text = self._run_multiscale_lstm(
                     feat_queue, pred_history, current_pred, expected_action
                 )
+                # 输出：current_pred为当前预测动作名（仅显示）/ expected_conf为期望动作概率（状态机用）/ top3_text为前3候选文本（UI 显示用）
 
-                # === ⑦ 顺序状态机：命中确认 / 超时跳过 / 多周期循环 ===
+                # === ⑥ 顺序状态机：命中确认 / 超时跳过 / 多周期循环 ===
                 if expected_action is not None:
-                    expected_conf = self._apply_expected_rules(expected_action, expected_conf, t_sec)
+                    expected_conf = self._apply_expected_rules(expected_action, expected_conf, t_sec) #当前画面序列正在做期望步骤"的概率
 
                     # 命中帧数机制：达标 +1，未达标立刻清零（不允许中断）
                     if expected_conf >= self.params.lstm_conf:
@@ -282,49 +279,40 @@ class InferenceWorker(QThread):
                     elif t_sec - self.expected_stage_start_sec > STEP_TIMEOUT_SEC:
                         self._timeout_action(expected_action, t_sec)
 
-                # === ⑧ 广播本帧状态 + 渲染画面到 UI ===
+                # === ⑦ 广播本帧状态 + 渲染画面到 UI ===
                 self._broadcast_frame_status(
                     frame_id, t_sec, current_pred, expected_show, expected_conf, top3_text, vis
                 )
 
                 frame_id += 1
 
-            cap.release()
+            cap.release() # 释放视频资源
             if self.hands is not None:
                 self.hands.close()
 
+            # === 收尾：打包结果 → 可选保存日志 → 通知 UI 推理结束 ===
+            # result：本次运行的输出目录（无则空串）+ 全部完成/超时事件列表
             result = {"run_dir": str(self.run_dir) if self.run_dir else "", "events": self.events}
-            if self.params.save_log and self.run_dir:
+            if self.params.save_log and self.run_dir:   # 勾选了"保存日志"且输出目录存在 → 导出 result.json + events.csv
                 self._save_logs()
 
-            self.sig_finished.emit(result)
+            self.sig_finished.emit(result)              # 把结果发给主线程 UI（on_finished 槽接收）
 
         except Exception as e:
             self.sig_error.emit(str(e))
 
     def _detect_frame(self, frame):
-        """② YOLO 检测 + ③ MediaPipe 手部关键点，返回 (vis, detections, hands_out)。"""
-        # === ② YOLO 检测物体（4 类：base/frame/mirror/screw）===
-        res = self.yolo.predict(frame, verbose=False, conf=self.params.yolo_conf, device=self.device)[0]
-        if self.params.show_boxes:
-            vis = draw_yolo_boxes_cn(frame, res.boxes, self.yolo.names)
-        else:
-            vis = frame.copy()  # 注：每帧拷贝一次，渲染密集时是非主要瓶颈
+        """② MediaPipe 手部关键点，返回 (vis, hands_out)。
 
-        detections = []
-        if res.boxes is not None:
-            for box in res.boxes:
-                cls_id = int(box.cls[0])
-                x1, y1, x2, y2 = map(float, box.xyxy[0].tolist())
-                detections.append(
-                    {
-                        "cls_name": self.yolo.names.get(cls_id, str(cls_id)),
-                        "conf": float(box.conf[0]),
-                        "xyxy": [x1, y1, x2, y2],
-                    }
-                )
+        单帧感知：这一帧里"手在哪"。
+        - 输入：一帧 BGR 图像
+        - 输出：
+          · vis：渲染后的画面（手部关键点按参数画上），用于 UI 显示
+          · hands_out：MediaPipe 手部关键点列表 [{hand_index, landmarks(21×3)}]，喂给特征拼装
+        """
+        vis = frame.copy()  # 注：每帧拷贝一次，渲染密集时是非主要瓶颈
 
-        # === ③ MediaPipe 手部 21 关键点（最多 2 只手）===
+        # === ② MediaPipe 手部 21 关键点（最多 2 只手）===
         rgb_raw = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # MediaPipe 要 RGB 输入
         hr = self.hands.process(rgb_raw)
         hands_out = []
@@ -342,7 +330,7 @@ class InferenceWorker(QThread):
                 lms = [[float(lm.x), float(lm.y), float(lm.z)] for lm in hand_lm.landmark]
                 hands_out.append({"hand_index": hidx, "landmarks": lms})
 
-        return vis, detections, hands_out
+        return vis, hands_out
 
     def _run_multiscale_lstm(self, feat_queue, pred_history, current_pred, expected_action):
         """⑥ 多尺度窗口 LSTM 投票 → 返回 (current_pred, expected_conf, top3_text)。
@@ -366,7 +354,7 @@ class InferenceWorker(QThread):
                 continue
 
             src_seq = feat_arr[-src_len:]
-            # 关键：不同长度窗口都重采样到 48 → LSTM 输入维度统一为 (1, 48, 146)
+            # 关键：不同长度窗口都重采样到 48 → LSTM 输入维度统一为 (1, 48, 126)
             # linspace 等距取点：96 帧窗口相当于每 2 帧取 1 帧（降采样）
             pos = np.linspace(0, src_len - 1, 48)
             idx = np.clip(np.round(pos).astype(int), 0, src_len - 1)
@@ -524,7 +512,7 @@ class InferenceWorker(QThread):
         with csv_path.open("w", newline="", encoding="utf-8-sig") as f:
             writer = csv.DictWriter(
                 f,
-                fieldnames=["cycle", "index", "action", "fine_label", "done_time_sec", "done_time_beijing", "snapshot_path"],
+                fieldnames=["cycle", "index", "action", "fine_label", "done_time_sec", "done_time_beijing", "snapshot_path", "status"],
             )
             writer.writeheader()
             for row in self.events:

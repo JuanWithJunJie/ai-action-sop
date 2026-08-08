@@ -2,7 +2,6 @@
 from ai_sop.core.constants import (  # noqa: F401
     ACTION_CN_MAP,
     BASE_DIR,
-    CLASS_NAMES,
     CONFIRM_FRAMES_FIXED,
     DEFAULT_ACTION_DEFS,
     F_DISPLAY,
@@ -18,11 +17,6 @@ from ai_sop.core.constants import (  # noqa: F401
     STEP_TIMEOUT_SEC,
     TIMELINE_CSV,
     UI_BG_PATH,
-    YOLO_BOX_THICKNESS,
-    YOLO_CN_MAP,
-    YOLO_MODEL_PATH,
-    YOLO_TEXT_OFFSET_Y,
-    YOLO_TEXT_SIZE,
     # 主题色快捷引用
     C_BLACK_85,
     C_BG_PRIMARY,
@@ -56,17 +50,16 @@ from ai_sop.core.utils import (  # noqa: F401
     fine_label_from_row,
     to_beijing_time_str,
 )
-from ai_sop.core.features import build_feature_row, draw_yolo_boxes_cn  # noqa: F401
+from ai_sop.core.features import build_feature_row  # noqa: F401
 from ai_sop.core.worker import InferenceWorker  # noqa: F401
 
 __all__ = [
     # constants
-    "ACTION_CN_MAP", "BASE_DIR", "CLASS_NAMES", "CONFIRM_FRAMES_FIXED",
+    "ACTION_CN_MAP", "BASE_DIR", "CONFIRM_FRAMES_FIXED",
     "DEFAULT_ACTION_DEFS", "F_DISPLAY", "F_MONO", "HAND_CIRCLE_RADIUS",
     "HAND_CONNECTION_THICKNESS", "HAND_LANDMARK_THICKNESS", "LSTM_CONFIG_PATH",
     "LSTM_MODEL_PATH", "RUNS_GUI_DIR", "SOURCE_WINDOWS", "STEP_MIN_STAGE_SEC",
-    "STEP_TIMEOUT_SEC", "TIMELINE_CSV", "UI_BG_PATH", "YOLO_BOX_THICKNESS",
-    "YOLO_CN_MAP", "YOLO_MODEL_PATH", "YOLO_TEXT_OFFSET_Y", "YOLO_TEXT_SIZE",
+    "STEP_TIMEOUT_SEC", "TIMELINE_CSV", "UI_BG_PATH",
     # 主题色
     "C_BLACK_85", "C_BG_PRIMARY", "C_BG_VIDEO_DARK", "C_BG_VIDEO_DIM",
     "C_CYAN", "C_CYAN_12", "C_CYAN_DK", "C_DARK", "C_DARK_TEXT", "C_DIM",
@@ -78,7 +71,7 @@ __all__ = [
     # utils
     "action_to_cn", "bgr_to_qimage", "fine_label_from_row", "to_beijing_time_str",
     # features
-    "build_feature_row", "draw_yolo_boxes_cn",
+    "build_feature_row",
     # worker
     "InferenceWorker",
 ]

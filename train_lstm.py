@@ -31,7 +31,7 @@ LSTM_OUTPUT_DIR = BASE_DIR / "lstm_runs_fine"
 
 WINDOW = 48
 STRIDE = 1
-INPUT_SIZE = 146
+INPUT_SIZE = 126
 HIDDEN_SIZE = 128
 NUM_LAYERS = 2
 
@@ -96,7 +96,7 @@ def make_windows(feat_arr, labels, window=WINDOW, stride=STRIDE):
     """滑动窗口切分：每个窗口 48 帧，标签 = 最后一帧的标签
 
     stride=1 时样本数 = N - window + 1。
-    返回 (X: float32 (N, 48, 146), Y: int64 (N,))；帧数不足返回空数组。
+    返回 (X: float32 (N, 48, 126), Y: int64 (N,))；帧数不足返回空数组。
     """
     X, Y = [], []
     n = len(feat_arr)

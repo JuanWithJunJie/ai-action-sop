@@ -17,7 +17,6 @@ from PyQt5.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
-    QMessageBox,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -56,6 +55,7 @@ from ai_sop.core.utils import bgr_to_qimage
 from ai_sop.core.worker import InferenceWorker
 from ai_sop.theme import COLORS
 from ai_sop.ui.event_item import EventItem
+from ai_sop.ui.dialogs import show_message
 from ai_sop.ui.stat_ring import StatRing
 from ai_sop.ui.step_card import StepCard
 
@@ -439,7 +439,7 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(right_frame)
 
     def _build_footer(self, root):
-        """底部：导入/开始/暂停/停止/导出按钮 + YOLO/LSTM 阈值 + 显示开关。"""
+        """底部：导入/开始/暂停/停止/导出按钮 + LSTM 阈值 + 显示开关。"""
         footer = QFrame()
         footer.setObjectName("footer")
         footer.setFixedHeight(48)
@@ -460,12 +460,8 @@ class MainWindow(QMainWindow):
 
         f_layout.addStretch()
 
-        self.edit_yolo = QLineEdit("0.30")
         self.edit_lstm = QLineEdit("0.15")
 
-        f_layout.addWidget(QLabel("YOLO阈值"))
-        f_layout.addWidget(self.edit_yolo)
-        f_layout.addSpacing(10)
         f_layout.addWidget(QLabel("LSTM阈值"))
         f_layout.addWidget(self.edit_lstm)
         f_layout.addSpacing(10)
@@ -473,12 +469,9 @@ class MainWindow(QMainWindow):
         self.chk_keypoints = QCheckBox("显示关键点")
         self.chk_snapshots = QCheckBox("保存截图")
         self.chk_log = QCheckBox("保存日志")
-        self.chk_boxes = QCheckBox("显示检测框")
         for cb in [self.chk_keypoints, self.chk_snapshots, self.chk_log]:
             cb.setChecked(True)
             f_layout.addWidget(cb)
-        self.chk_boxes.setChecked(False)
-        f_layout.addWidget(self.chk_boxes)
 
         root.addWidget(footer)
 
@@ -526,13 +519,13 @@ class MainWindow(QMainWindow):
         path = Path(f)
         cap = cv2.VideoCapture(str(path))
         if not cap.isOpened():
-            QMessageBox.warning(self, "导入失败", "该视频无法打开")
+            show_message(self, "warning", "导入失败", "该视频无法打开")
             return
 
         ok, frame = cap.read()
         if not ok or frame is None:
             cap.release()
-            QMessageBox.warning(self, "导入失败", "该视频无法读取帧")
+            show_message(self, "warning", "导入失败", "该视频无法读取帧")
             return
 
         h, w = frame.shape[:2]
@@ -553,12 +546,10 @@ class MainWindow(QMainWindow):
                 card.set_status("pending")
 
     def _params(self) -> RuntimeParams:
-        """从 GUI 控件读取当前 RuntimeParams（YOLO 阈值/LSTM 阈值/各开关）。"""
+        """从 GUI 控件读取当前 RuntimeParams（LSTM 阈值/各开关）。"""
         return RuntimeParams(
-            yolo_conf=float(self.edit_yolo.text().strip()),
             lstm_conf=float(self.edit_lstm.text().strip()),
             confirm_frames=CONFIRM_FRAMES_FIXED,
-            show_boxes=self.chk_boxes.isChecked(),
             show_keypoints=self.chk_keypoints.isChecked(),
             save_snapshots=self.chk_snapshots.isChecked(),
             save_log=self.chk_log.isChecked(),
@@ -567,16 +558,16 @@ class MainWindow(QMainWindow):
     def on_start(self):
         """「开始分析」按钮槽：校验前置条件 → 重置统计 → 创建并启动 InferenceWorker。"""
         if self.worker and self.worker.isRunning():
-            QMessageBox.information(self, "提示", "正在分析中")
+            show_message(self, "info", "提示", "正在分析中")
             return
         if not self.video_path:
-            QMessageBox.warning(self, "提示", "请先导入视频")
+            show_message(self, "warning", "提示", "请先导入视频")
             return
 
         try:
             params = self._params()
         except Exception:
-            QMessageBox.warning(self, "参数错误", "请检查阈值参数格式")
+            show_message(self, "warning", "参数错误", "请检查阈值参数格式")
             return
 
         self.pass_count = 0
@@ -618,7 +609,7 @@ class MainWindow(QMainWindow):
     def on_export(self):
         """「导出结果」按钮槽：把上次 run_dir 复制到用户选的目录（截图 + JSON + CSV）。"""
         if not self.last_run_dir or not self.last_run_dir.exists():
-            QMessageBox.information(self, "提示", "暂无可导出结果")
+            show_message(self, "info", "提示", "暂无可导出结果")
             return
         dst = QFileDialog.getExistingDirectory(self, "选择导出目录", str(BASE_DIR))
         if not dst:
@@ -627,7 +618,7 @@ class MainWindow(QMainWindow):
         if out.exists():
             shutil.rmtree(out)
         shutil.copytree(self.last_run_dir, out)
-        QMessageBox.information(self, "导出完成", f"已导出到: {out}")
+        show_message(self, "info", "导出完成", f"已导出到: {out}")
 
     def _set_video_preview_pixmap(self, pix: QPixmap):
         """把 QPixmap 按比例缩放到 video_label 尺寸并显示（导入视频时显示首帧）。"""
@@ -787,11 +778,11 @@ class MainWindow(QMainWindow):
         self.last_run_dir = Path(run_dir) if run_dir else None
         self.lbl_status_pill.setText("● 系统在线")
         self.lbl_status_pill.setStyleSheet(f"background: {C_GREEN_10}; border: 1px solid {C_GREEN_30}; border-radius: 20px; padding: 5px 14px; font-size: 12px; font-weight: 600; color: {C_GREEN};")
-        QMessageBox.information(self, "完成", "视频分析完成")
+        show_message(self, "info", "完成", "视频分析完成")
 
     def on_error(self, msg: str):
         """sig_error 槽：推理线程抛异常时弹错误对话框。"""
-        QMessageBox.critical(self, "错误", msg)
+        show_message(self, "error", "错误", msg)
         self.lbl_status_pill.setText("● 系统在线")
         self.lbl_status_pill.setStyleSheet(f"background: {C_GREEN_10}; border: 1px solid {C_GREEN_30}; border-radius: 20px; padding: 5px 14px; font-size: 12px; font-weight: 600; color: {C_GREEN};")
 

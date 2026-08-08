@@ -7,37 +7,33 @@
 from ai_sop import main  # noqa: F401  重导出 main()
 from ai_sop import (  # noqa: F401  兼容旧导入路径
     BASE_DIR,
-    YOLO_MODEL_PATH,
     LSTM_MODEL_PATH,
     ActionLSTM,
     RuntimeParams,
     ActionRuntime,
     InferenceWorker,
     build_feature_row,
-    draw_yolo_boxes_cn,
     bgr_to_qimage,
     to_beijing_time_str,
     action_to_cn,
     fine_label_from_row,
-    CLASS_NAMES,
     SOURCE_WINDOWS,
     CONFIRM_FRAMES_FIXED,
     STEP_TIMEOUT_SEC,
     STEP_MIN_STAGE_SEC,
     DEFAULT_ACTION_DEFS,
     ACTION_CN_MAP,
-    YOLO_CN_MAP,
 )
 
 __all__ = [
     "main",
-    "BASE_DIR", "YOLO_MODEL_PATH", "LSTM_MODEL_PATH",
+    "BASE_DIR", "LSTM_MODEL_PATH",
     "ActionLSTM", "RuntimeParams", "ActionRuntime", "InferenceWorker",
-    "build_feature_row", "draw_yolo_boxes_cn", "bgr_to_qimage",
+    "build_feature_row", "bgr_to_qimage",
     "to_beijing_time_str", "action_to_cn", "fine_label_from_row",
-    "CLASS_NAMES", "SOURCE_WINDOWS", "CONFIRM_FRAMES_FIXED",
+    "SOURCE_WINDOWS", "CONFIRM_FRAMES_FIXED",
     "STEP_TIMEOUT_SEC", "STEP_MIN_STAGE_SEC",
-    "DEFAULT_ACTION_DEFS", "ACTION_CN_MAP", "YOLO_CN_MAP",
+    "DEFAULT_ACTION_DEFS", "ACTION_CN_MAP",
 ]
 
 
