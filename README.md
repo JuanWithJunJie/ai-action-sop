@@ -108,6 +108,7 @@ PyQt5==5.15.10
 ├── train_lstm.py              # LSTM 训练：数据增强 + 类别权重 + 训练
 ├── auto_label.py              # 自动伪标注：KNN 相似度给未标注区间打标签
 ├── ingest_pending.py          # 误判样本回灌：pending_samples → 训练数据
+├── evaluate.py                # 批量评估：视频推理准确率 / 周期CT报告
 ├── requirements.txt           # Python 依赖
 ├── start.sh                   # Linux 一键启动脚本
 ├── build.bat                  # Windows PyInstaller 打包脚本
@@ -261,6 +262,15 @@ python ai_sop_gui.py
 ```
 
 导入视频，观察 D1→D2→D3→D4 多周期循环推进效果。
+
+批量评估多个测试视频的识别准确率：
+
+```bash
+python evaluate.py                          # 评估 video/ 下全部视频
+python evaluate.py --video-dir D:/videos    # 指定视频目录
+```
+
+输出 `evaluate_report.json`：每个视频的完成/超时/准确率/周期CT，以及整体准确率与平均CT。
 
 ---
 
