@@ -41,6 +41,9 @@ CONFIRM_FRAMES_FIXED = int(_INF.get("confirm_frames", 4))          # 命中确�
 STEP_TIMEOUT_SEC = float(_INF.get("step_timeout_sec", 6.0))        # 步骤超时：某步 N 秒未完成则强制跳过
 STEP_MIN_STAGE_SEC = float(_INF.get("step_min_stage_sec", 0.8))    # 步骤最小持续时间（防尾巴误判）
 LSTM_CONF_DEFAULT = float(_INF.get("lstm_conf_default", 0.15))     # GUI 阈值输入框默认值
+MAX_RECONNECT_ATTEMPTS = int(_INF.get("max_reconnect_attempts", 5))  # 实时源断线最大重连次数
+RECONNECT_DELAY_SEC = float(_INF.get("reconnect_delay_sec", 2.0))   # 每次重连间隔（秒）
+WATCHDOG_TIMEOUT_SEC = float(_INF.get("watchdog_timeout_sec", 8.0)) # 推理无心跳判定异常的超时（秒）
 
 # ===== 工位信息（config.json 可覆盖）=====
 _SITE = CONFIG.get("site", {})

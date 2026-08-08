@@ -1,6 +1,7 @@
 """MainWindow —— 主窗口，集成所有 UI 区域。"""
 import shutil
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
@@ -32,6 +33,7 @@ from ai_sop.core.constants import (
     F_DISPLAY,
     F_MONO,
     LSTM_CONF_DEFAULT,
+    WATCHDOG_TIMEOUT_SEC,
     SITE_INFO,
     C_BG_PRIMARY,
     C_BG_VIDEO_DARK,
@@ -82,6 +84,7 @@ class MainWindow(QMainWindow):
         self.last_run_dir: Optional[Path] = None
         self.pass_count = 0     # 完成事件数
         self.skip_count = 0     # 超时跳过事件数
+        self._last_status_monotonic = time.monotonic()   # 最后一次收到 worker 状态心跳的时间（看门狗用）
 
         self.cards: List[StepCard] = []
         self.event_items: List[EventItem] = []
@@ -541,9 +544,18 @@ class MainWindow(QMainWindow):
                 self.move(self.pos() + delta)
 
     def _update_clock(self):
-        """每秒刷新标题栏的当前时间显示。"""
+        """每秒刷新标题栏的当前时间显示 + 推理看门狗检查。"""
         now = datetime.now()
         self.lbl_clock.setText(now.strftime("%H:%M:%S"))
+
+        # 看门狗：worker 运行中但长时间无状态心跳 → 提示推理异常
+        if self.worker and self.worker.isRunning():
+            if time.monotonic() - self._last_status_monotonic > WATCHDOG_TIMEOUT_SEC:
+                self.lbl_status_pill.setText("● 推理异常（无响应）")
+                self.lbl_status_pill.setStyleSheet(
+                    f"background: {C_RED_30}; border: 1px solid {C_RED_30}; border-radius: 20px; "
+                    f"padding: 5px 14px; font-size: 12px; font-weight: 600; color: {C_RED};"
+                )
 
     def on_import_video(self):
         """「导入视频」按钮槽：弹文件对话框选 mp4，预览首帧，校验可解码后保存路径。"""
@@ -753,6 +765,12 @@ class MainWindow(QMainWindow):
           1) action_defs 字段：多周期循环重置，刷新卡片名称 + cycle 计数
           2) 普通帧状态：更新当前预测/期望步骤/置信度/命中数等
         """
+        self._last_status_monotonic = time.monotonic()   # 任何状态更新都刷新看门狗心跳
+
+        if "source_status" in st:
+            self._handle_source_status(st)
+            return
+
         if "action_defs" in st:
             self._reset_cards(st["action_defs"])
             cycle = st.get("cycle", 1)
@@ -797,6 +815,36 @@ class MainWindow(QMainWindow):
             else:
                 if card.status not in ("done", "timeout"):
                     card.set_status("pending")
+
+    def _handle_source_status(self, st: dict):
+        """处理实时视频源状态：丢失 / 重连中 / 已重连 / 失败。"""
+        status = st.get("source_status")
+        if status == "lost":
+            self.lbl_status_pill.setText("● 视频信号丢失")
+            self.lbl_status_pill.setStyleSheet(
+                f"background: {C_RED_30}; border: 1px solid {C_RED_30}; border-radius: 20px; "
+                f"padding: 5px 14px; font-size: 12px; font-weight: 600; color: {C_RED};"
+            )
+        elif status == "reconnecting":
+            attempt = st.get("attempt", 1)
+            max_att = st.get("max_attempts", 5)
+            self.lbl_status_pill.setText(f"● 重连中 ({attempt}/{max_att})")
+            self.lbl_status_pill.setStyleSheet(
+                f"background: {C_ORANGE_10}; border: 1px solid {C_ORANGE_30}; border-radius: 20px; "
+                f"padding: 5px 14px; font-size: 12px; font-weight: 600; color: {C_ORANGE};"
+            )
+        elif status == "reconnected":
+            self.lbl_status_pill.setText("● 已重连")
+            self.lbl_status_pill.setStyleSheet(
+                f"background: {C_GREEN_10}; border: 1px solid {C_GREEN_30}; border-radius: 20px; "
+                f"padding: 5px 14px; font-size: 12px; font-weight: 600; color: {C_GREEN};"
+            )
+        elif status == "failed":
+            self.lbl_status_pill.setText("● 视频源异常")
+            self.lbl_status_pill.setStyleSheet(
+                f"background: {C_RED_30}; border: 1px solid {C_RED_30}; border-radius: 20px; "
+                f"padding: 5px 14px; font-size: 12px; font-weight: 600; color: {C_RED};"
+            )
 
     def on_action(self, ev: dict):
         """sig_action 槽：步骤完成或超时跳过时被调用。

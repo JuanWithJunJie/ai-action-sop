@@ -22,6 +22,8 @@ from ai_sop.core.constants import (
     HAND_LANDMARK_THICKNESS,
     LSTM_CONFIG_PATH,
     LSTM_MODEL_PATH,
+    MAX_RECONNECT_ATTEMPTS,
+    RECONNECT_DELAY_SEC,
     RUNS_GUI_DIR,
     SOURCE_WINDOWS,
     STEP_MIN_STAGE_SEC,
@@ -174,6 +176,25 @@ class InferenceWorker(QThread):
         cv2.imwrite(str(out), frame_bgr)
         return str(out)
 
+    def _reconnect(self):
+        """实时源断线重连：间隔重开 VideoCapture，最多 MAX_RECONNECT_ATTEMPTS 次。
+
+        每次尝试前广播「重连中」状态给 UI；成功广播「已重连」并返回新句柄，全部失败返回 None。
+        """
+        for attempt in range(1, MAX_RECONNECT_ATTEMPTS + 1):
+            self.sig_status.emit({
+                "source_status": "reconnecting",
+                "attempt": attempt,
+                "max_attempts": MAX_RECONNECT_ATTEMPTS,
+            })
+            self.msleep(int(RECONNECT_DELAY_SEC * 1000))
+            src = int(self.video_source) if self.video_source.isdigit() else self.video_source
+            new_cap = cv2.VideoCapture(src)
+            if new_cap.isOpened():
+                self.sig_status.emit({"source_status": "reconnected"})
+                return new_cap
+        return None
+
     def _calc_expected_conf(self, probs: torch.Tensor, expected_label: str) -> float:
         """取「期望步骤」对应的概率值（不取 argmax）。
 
@@ -259,7 +280,20 @@ class InferenceWorker(QThread):
 
                 ok, frame = cap.read()  # 取一帧
                 if not ok:
-                    break
+                    if not self.is_live:
+                        break                            # 文件模式：读完即结束
+                    # 实时源断线：尝试重连，成功则清空缓冲继续，失败则结束
+                    self.sig_status.emit({"source_status": "lost"})
+                    new_cap = self._reconnect()
+                    if new_cap is None:
+                        self.sig_status.emit({"source_status": "failed"})
+                        break
+                    cap.release()
+                    cap = new_cap
+                    feat_queue.clear()                   # 清空旧特征，避免断线前后的特征混用
+                    pred_history.clear()
+                    self.expected_stage_start_sec = t_sec  # 重连后重置步骤计时，避免断线导致误超时
+                    continue
 
                 # t_sec：文件用帧号/fps（回放时间与录制一致）；实时源用墙钟流逝（从打开源开始算）
                 t_sec = (time.monotonic() - live_t0) if live_t0 is not None else frame_id / fps

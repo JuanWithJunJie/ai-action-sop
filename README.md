@@ -171,6 +171,8 @@ GUI 操作：
 | `model.lstm_model / lstm_config` | LSTM 模型权重与配置路径 |
 | `inference.lstm_conf_default` | LSTM 阈值输入框默认值 |
 | `inference.confirm_frames / step_timeout_sec / step_min_stage_sec` | 命中确认帧数、步骤超时、最小步骤持续时间 |
+| `inference.max_reconnect_attempts / reconnect_delay_sec` | 实时源（摄像头/RTSP）断线后的最大重连次数与间隔 |
+| `inference.watchdog_timeout_sec` | 推理无心跳判定异常的超时（秒），超时后顶部状态栏提示「推理异常」 |
 
 ### 4. 打包发布（Windows）
 

@@ -17,6 +17,9 @@
     "lstm_conf_default": 0.15,
     "confirm_frames": 4,
     "step_timeout_sec": 6.0,
-    "step_min_stage_sec": 0.8
+    "step_min_stage_sec": 0.8,
+    "max_reconnect_attempts": 5,
+    "reconnect_delay_sec": 2.0,
+    "watchdog_timeout_sec": 8.0
   }
 }

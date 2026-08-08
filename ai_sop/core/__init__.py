@@ -14,6 +14,8 @@ from ai_sop.core.constants import (  # noqa: F401
     LSTM_CONFIG_PATH,
     LSTM_CONF_DEFAULT,
     LSTM_MODEL_PATH,
+    MAX_RECONNECT_ATTEMPTS,
+    RECONNECT_DELAY_SEC,
     RUNS_GUI_DIR,
     SITE_INFO,
     SOURCE_WINDOWS,
@@ -21,6 +23,7 @@ from ai_sop.core.constants import (  # noqa: F401
     STEP_TIMEOUT_SEC,
     TIMELINE_CSV,
     UI_BG_PATH,
+    WATCHDOG_TIMEOUT_SEC,
     # 主题色快捷引用
     C_BLACK_85,
     C_BG_PRIMARY,
