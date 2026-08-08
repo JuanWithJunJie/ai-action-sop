@@ -281,7 +281,7 @@ python report.py                         # 聚合 runs_gui/ 全部结果生成�
 python report.py --run-dir runs_gui/xxx  # 只看某一次运行
 ```
 
-输出 `production_report.html`：概览卡片（平均CT/完成周期/步骤完成率/超时数）、CT 趋势折线、瓶颈步骤分析（各步平均耗时与超时次数）。纯 HTML+SVG，无外部依赖，可直接用浏览器打开。
+输出 `production_report.html`：概览卡片（平均CT/完成周期/步骤完成率/超时数）、CT 趋势折线、瓶颈步骤分析（各步平均耗时与超时次数）、多工位对比（多个工位的运行结果按 `site.station` 分组展示）。纯 HTML+SVG，无外部依赖，可直接用浏览器打开。
 
 ### MES / 中央系统对接
 

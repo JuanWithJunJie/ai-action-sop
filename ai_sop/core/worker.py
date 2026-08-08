@@ -695,6 +695,7 @@ class InferenceWorker(QThread):
 
         result_obj = {
             "video": self.video_path.name if self.video_path is not None else self.video_source,
+            "site": SITE_INFO,
             "total_cycles": self.cycle,
             "completed_cycles": len(self.cycle_times_sec),
             "cycle_times_sec": self.cycle_times_sec,

@@ -73,6 +73,15 @@ def compute_stats(runs: list) -> dict:
     }
 
 
+def compute_stats_by_station(runs: list) -> dict:
+    """按工位（site.station）分组统计，用于多工位对比。"""
+    stations: dict = {}
+    for run in runs:
+        st = run["data"].get("site", {}).get("station", "未知工位")
+        stations.setdefault(st, []).append(run)
+    return {st: compute_stats(grp) for st, grp in stations.items()}
+
+
 def svg_line_chart(values: list, width=860, height=240) -> str:
     """CT 趋势折线（SVG polyline），无外部依赖。"""
     if len(values) < 2:
@@ -135,10 +144,19 @@ def svg_bar_chart(stats: dict, width=860, height=240) -> str:
     </svg>"""
 
 
-def render_html(stats: dict, sources: list) -> str:
+def render_html(stats: dict, sources: list, station_stats: dict = None) -> str:
     ct_line = svg_line_chart(stats["cycle_times"])
     bar_chart = svg_bar_chart(stats)
     rate = round(stats["completed"] / stats["total_events"] * 100, 1) if stats["total_events"] else 0.0
+    station_rows = ""
+    if station_stats:
+        for st, s in station_stats.items():
+            s_rate = round(s["completed"] / s["total_events"] * 100, 1) if s["total_events"] else 0.0
+            station_rows += (
+                f"<tr><td>{st}</td><td>{len(s['cycle_times'])}</td>"
+                f"<td>{s['avg_ct'] if s['avg_ct'] is not None else '--'}s</td>"
+                f"<td>{s_rate}%</td><td>{s['timeouts']}</td></tr>"
+            )
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -182,6 +200,14 @@ def render_html(stats: dict, sources: list) -> str:
     <h2>运行明细</h2>
     {''.join(f'<div class="src">• {s["name"]}：{s["data"].get("video", "")}</div>' for s in sources)}
   </div>
+  {f'''
+  <div class="panel">
+    <h2>多工位对比</h2>
+    <table>
+      <tr><th>工位</th><th>完成周期</th><th>平均CT</th><th>步骤完成率</th><th>超时步骤</th></tr>
+      {station_rows}
+    </table>
+  </div>''' if station_rows else ""}
 </body>
 </html>"""
 
@@ -204,7 +230,8 @@ def main():
         return
 
     stats = compute_stats(runs)
-    html = render_html(stats, runs)
+    station_stats = compute_stats_by_station(runs)
+    html = render_html(stats, runs, station_stats)
     out = Path(args.output)
     out.write_text(html, encoding="utf-8")
     print(f"报表已生成: {out}")
