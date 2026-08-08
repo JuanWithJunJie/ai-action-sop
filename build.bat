@@ -20,6 +20,7 @@ if exist dist rmdir /s /q dist
 
 echo [3/3] 开始打包（首次打包需几分钟）...
 .venv\Scripts\pyinstaller --noconfirm --clean --windowed --name AI-SOP-Vision ^
+    --collect-data mediapipe ^
     --add-data "lstm_runs_fine;lstm_runs_fine" ^
     --add-data "config.json;." ^
     ai_sop_gui.py || exit /b 1

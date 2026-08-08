@@ -4,6 +4,9 @@ __pycache__/
 build/
 dist/
 *.spec
+# 生成的报告
+production_report.html
+evaluate_report.json
 runs_gui/
 uploads/
 train_data/features/
