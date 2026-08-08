@@ -258,11 +258,6 @@ class InferenceWorker(QThread):
                     expected_show = expected_action.show            # 期望步骤的显示名
                     if self.expected_idx != self.last_expected_idx: # 刚切换到新步骤（首次进入/上一步完成）
                         self.expected_stage_start_sec = t_sec       # 记录本步骤开始时间（超时判断 + 最小持续用）
-                        expected_action.start_time_sec = t_sec      # 记录本步骤开始时间（步骤耗时用）
-                        expected_action.start_time_beijing = to_beijing_time_str()
-                        if self.expected_idx == 0:                  # 周期第一步入场 → 记录周期开始（算 CT）
-                            self.cycle_start_sec = t_sec
-                            self.cycle_start_beijing = expected_action.start_time_beijing
                         self.last_expected_idx = self.expected_idx  # 更新标记，避免每帧重复记录
 
                 # === ⑤ 多尺度窗口 LSTM 投票：用特征缓冲跑 3 窗口 LSTM + 双轮多数票
@@ -278,6 +273,13 @@ class InferenceWorker(QThread):
 
                     # 命中帧数机制：达标 +1，未达标立刻清零（不允许中断）
                     if expected_conf >= self.params.lstm_conf:
+                        # 首次命中：记录动作开始时间（步骤耗时/CT 从"检测到动作"开始计时）
+                        if expected_action.start_time_sec is None:
+                            expected_action.start_time_sec = t_sec
+                            expected_action.start_time_beijing = to_beijing_time_str()
+                            if self.expected_idx == 0 and self.cycle_start_sec is None:
+                                self.cycle_start_sec = t_sec
+                                self.cycle_start_beijing = expected_action.start_time_beijing
                         self.current_hit += 1
                     else:
                         self.current_hit = 0
@@ -293,8 +295,13 @@ class InferenceWorker(QThread):
                         self._timeout_action(expected_action, t_sec)
 
                 # === ⑦ 广播本帧状态 + 渲染画面到 UI ===
+                stage_start = (
+                    expected_action.start_time_sec
+                    if expected_action is not None and expected_action.start_time_sec is not None
+                    else self.expected_stage_start_sec
+                )
                 self._broadcast_frame_status(
-                    frame_id, t_sec, current_pred, expected_show, expected_conf, top3_text, vis
+                    frame_id, t_sec, current_pred, expected_show, expected_conf, top3_text, vis, stage_start
                 )
 
                 frame_id += 1
@@ -534,12 +541,12 @@ class InferenceWorker(QThread):
             }
         )
 
-    def _broadcast_frame_status(self, frame_id, t_sec, current_pred, expected_show, expected_conf, top3_text, vis):
+    def _broadcast_frame_status(self, frame_id, t_sec, current_pred, expected_show, expected_conf, top3_text, vis, stage_start_sec=None):
         """⑧ 广播本帧状态 + 渲染画面到 UI。"""
         status = {
             "frame_id": frame_id,
             "time_sec": t_sec,
-            "stage_start_sec": self.expected_stage_start_sec,   # 当前步骤开始时间（UI 实时显示步骤耗时用）
+            "stage_start_sec": stage_start_sec if stage_start_sec is not None else self.expected_stage_start_sec,
             "current_pred": action_to_cn(current_pred),   # LSTM 当前预测（仅显示，不驱动状态机）
             "expected_show": expected_show,
             "expected_conf": expected_conf,
