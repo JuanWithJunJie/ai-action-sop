@@ -46,13 +46,18 @@
 ### 运行环境
 
 ```
-Python 3.11 + CUDA (RTX 3060+)
-torch==2.2.2+cu121
+Python 3.10~3.11
+torch==2.2.2（CPU / CUDA 12.1 均可，GPU 加速可选）
+torchvision==0.17.2
 mediapipe==0.10.9
-opencv-python==4.13.0.90
-numpy==1.26.4
+opencv-python==4.10.0.84
+numpy==1.26.4（<2）
+pandas==2.3.3
+Pillow==10.2.0
 PyQt5==5.15.10
 ```
+
+> 完整依赖见 `requirements.txt`；无 GPU 的机器可直接用 CPU 运行。
 
 ---
 
@@ -65,7 +70,7 @@ PyQt5==5.15.10
 | **D3** | 检测 | `D3_inspect` | 检查外观/质量 |
 | **D4** | 放料 | `D4_place_material` | 放入成品区 |
 
-> 可在 `ai_sop_gui.py` 的 `DEFAULT_ACTION_DEFS` 中自定义步骤。
+> 可在 `ai_sop/core/constants.py` 的 `DEFAULT_ACTION_DEFS` 中自定义步骤。
 
 ---
 
@@ -93,25 +98,27 @@ PyQt5==5.15.10
 
 ```text
 .
-├── ai_sop_gui.py              # 主程序：PyQt5 GUI + 推理引擎
+├── ai_sop_gui.py              # 兼容入口（重导出 ai_sop.main）
+├── ai_sop/                    # 核心包
+│   ├── __main__.py            # 程序入口（python -m ai_sop）
+│   ├── core/                  # 推理核心：constants / models / features / worker
+│   └── ui/                    # PyQt5 界面：主窗口 / 步骤卡片 / 统计环
 ├── extract_features.py        # 特征提取：视频 → 126维 .npy
 ├── train_lstm.py              # LSTM 训练：数据增强 + 类别权重 + 训练
 ├── auto_label.py              # 自动伪标注：KNN 相似度给未标注区间打标签
 ├── requirements.txt           # Python 依赖
 ├── .gitignore
 │
-├── video/                     # 测试视频
+├── video/                     # 测试视频（需自行创建，已 gitignore）
 ├── lstm_runs_fine/            # LSTM 模型权重 + 配置
 │   ├── best_lstm_fine.pt
 │   └── config.json
 │
 ├── train_data/                # 训练数据
 │   ├── timeline.csv           # 动作时间标注
-│   ├── timeline_auto.csv     # 自动伪标注结果
-│   └── features/              # 提取的 .npy 特征文件
+│   ├── timeline_auto.csv      # 自动伪标注结果
+│   └── features/              # 提取的 .npy 特征文件（运行时生成，已 gitignore）
 │
-├── 背景图片.jpg
-├── AI-sop界面.png
 ├── LICENSE
 └── README.md
 ```
@@ -127,11 +134,11 @@ PyQt5==5.15.10
 python -m venv .venv
 .venv\Scripts\activate
 
-# 安装 PyTorch (CUDA 12.1)
-pip install torch==2.2.2 torchvision==0.17.2 --index-url https://download.pytorch.org/whl/cu121
-
 # 安装其余依赖
 pip install -r requirements.txt
+
+# 如需 CUDA 加速，可先安装 CUDA 版 PyTorch（可选）
+pip install torch==2.2.2 torchvision==0.17.2 --index-url https://download.pytorch.org/whl/cu121
 ```
 
 ### 2. 启动桌面客户端
@@ -187,7 +194,9 @@ video_name,step_id,step_cn,start_sec,end_sec
 python auto_label.py
 ```
 
-输出 `train_data/timeline_auto.csv`，在 `train_lstm.py` 中切换使用。
+输出 `train_data/timeline_auto.csv`。
+
+> 训练脚本固定读取 `train_data/timeline.csv`。如采用自动标注结果，请将 `timeline_auto.csv` 的内容合并或替换到 `timeline.csv`。
 
 ### Step 5：训练 LSTM
 
@@ -250,7 +259,7 @@ GUI 根据窗口大小自动缩放字体，最大化后文字自动放大，适�
 | UI 层 | PyQt5 + QSS + QPainter | 渲染界面、显示帧、用户交互 |
 | 推理层 | QThread + MediaPipe + LSTM | 逐帧推理、步骤推进、事件记录 |
 | 数据层 | JSON + CSV + 截图 | 结果存储、日志导出、截图留档 |
-| 视频源 | OpenCV VideoCapture | 视频文件 / RTSP 流 / USB 摄像头 |
+| 视频源 | OpenCV VideoCapture | 视频文件（GUI 提供文件导入；RTSP / 摄像头需自行接入） |
 
 **选择 PyQt5 单体架构的理由**：
 - 帧渲染延迟 <5ms（内存直传，无编码开销）
@@ -278,7 +287,7 @@ GUI 根据窗口大小自动缩放字体，最大化后文字自动放大，适�
 项目使用 `numpy==1.26.4`，与 opencv 的 pip 声明有冲突但实际运行正常。
 
 ### Q6：如何接入实时摄像头或 RTSP 流？
-修改视频源为 `cv2.VideoCapture(0)`（USB 摄像头）或 `cv2.VideoCapture("rtsp://...")`。
+当前 GUI 提供「导入视频」文件入口。如需 USB 摄像头或 RTSP 流，可修改 `ai_sop/core/worker.py` 中的视频源，将 `video_path` 替换为 `0`（摄像头）或 `rtsp://...` 地址（OpenCV 已支持）。
 
 ---
 
