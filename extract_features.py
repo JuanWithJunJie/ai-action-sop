@@ -15,6 +15,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import torch
 from ultralytics import YOLO
 
 try:
@@ -32,7 +33,21 @@ from ai_sop_gui import (
 OUTPUT_DIR = BASE_DIR / "train_data" / "features"
 
 
+def _select_device() -> str:
+    """推理设备：CUDA > MPS(Apple Silicon) > CPU。"""
+    if torch.cuda.is_available():
+        return "cuda:0"
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
 def extract_video(video_path: Path, yolo: YOLO, hands, device: str):
+    """对单个视频逐帧提取 146 维特征，保存为 train_data/features/<视频名>.npy。
+
+    与 ai_sop_gui.py 的 build_feature_row() 共享同一特征定义 —— 训练/推理一致性关键。
+    返回输出 .npy 路径；视频无法打开时返回 None。
+    """
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         print(f"  [跳过] 无法打开: {video_path}")
@@ -50,7 +65,8 @@ def extract_video(video_path: Path, yolo: YOLO, hands, device: str):
             break
 
         h, w = frame.shape[:2]
-        res = yolo.predict(frame, verbose=False, conf=0.25, device=device)[0]
+        # conf 与 GUI 默认 0.30 保持一致，避免训练-推理特征分布偏移
+        res = yolo.predict(frame, verbose=False, conf=0.30, device=device)[0]
 
         detections = []
         if res.boxes is not None:
@@ -91,12 +107,13 @@ def extract_video(video_path: Path, yolo: YOLO, hands, device: str):
 
 
 def main():
+    """命令行入口：扫描 video/ 下所有 mp4，逐个调用 extract_video() 提取特征。"""
     parser = argparse.ArgumentParser(description="提取视频特征用于 LSTM 训练")
     parser.add_argument("--video", type=str, help="单个视频路径")
     parser.add_argument("--video_dir", type=str, help="视频目录（默认 video/）")
     args = parser.parse_args()
 
-    device = "cuda:0" if __import__("torch").cuda.is_available() else "cpu"
+    device = _select_device()
     print(f"设备: {device}")
 
     print(f"加载 YOLO 模型: {YOLO_MODEL_PATH}")

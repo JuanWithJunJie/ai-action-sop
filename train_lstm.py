@@ -16,7 +16,6 @@ LSTM 训练脚本：用提取好的特征 + timeline 标注训练动作识别模
 """
 import argparse
 import json
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -54,6 +53,7 @@ NUM_CLASSES = len(LABEL_MAP)
 
 
 def load_timeline():
+    """读取 train_data/timeline.csv，返回 pandas.DataFrame。文件不存在则抛 FileNotFoundError。"""
     if not TIMELINE_CSV.exists():
         raise FileNotFoundError(f"找不到 timeline 标注文件: {TIMELINE_CSV}\n请先编辑该文件标注 D1~D4 起止时间")
     df = pd.read_csv(TIMELINE_CSV)
@@ -61,7 +61,11 @@ def load_timeline():
 
 
 def build_frame_labels(feat_arr, fps, df_timeline, video_name):
-    """根据 timeline 为每帧生成标签 id"""
+    """根据 timeline 为每帧生成标签 id
+
+    返回长度 = len(feat_arr) 的 int64 数组，未标注帧默认 background (id=0)。
+    时间区间通过 start_sec/end_sec × fps 转换到帧号，并 clamp 到 [0, len-1]。
+    """
     labels = np.zeros(len(feat_arr), dtype=np.int64)
 
     sdf = df_timeline[df_timeline["video_name"] == video_name]
@@ -89,7 +93,11 @@ def build_frame_labels(feat_arr, fps, df_timeline, video_name):
 
 
 def make_windows(feat_arr, labels, window=WINDOW, stride=STRIDE):
-    """滑动窗口切分：每个窗口 48 帧，标签 = 最后一帧的标签"""
+    """滑动窗口切分：每个窗口 48 帧，标签 = 最后一帧的标签
+
+    stride=1 时样本数 = N - window + 1。
+    返回 (X: float32 (N, 48, 146), Y: int64 (N,))；帧数不足返回空数组。
+    """
     X, Y = [], []
     n = len(feat_arr)
     if n < window:
@@ -104,7 +112,10 @@ def make_windows(feat_arr, labels, window=WINDOW, stride=STRIDE):
 
 
 def augment_data(X, Y, noise_std=0.02, n_aug=2):
-    """数据增强：高斯噪声 + 时间扭曲 + 特征缩放"""
+    """数据增强：高斯噪声 + 特征缩放 + 时间扭曲，原始 + n_aug 倍扩充
+
+    种子固定 (RandomState(42)) 保证可复现。返回合并后的 (aug_X, aug_Y)。
+    """
     aug_X, aug_Y = list(X), list(Y)
     rng = np.random.RandomState(42)
 
@@ -128,6 +139,13 @@ def augment_data(X, Y, noise_std=0.02, n_aug=2):
 
 
 def load_data(val_video=None):
+    """加载所有特征 .npy + timeline 标注，切窗口后返回 (train_X, train_Y, val_X, val_Y)。
+
+    - 指定 val_video：该视频的全部窗口作为验证集，其余作训练集（推荐，避免数据泄漏）
+    - 未指定：从训练集随机切 20% 作验证（提示后仍可用，但相邻窗口高度相关）
+
+    数据增强在 train() 里另调 augment_data() 完成。
+    """
     df_timeline = load_timeline()
 
     feat_files = sorted(FEATURES_DIR.glob("*.npy"))
@@ -186,6 +204,7 @@ def load_data(val_video=None):
 
 
 def _get_video_fps(video_name):
+    """从 video/ 或 train_data/video/ 目录读取视频 fps，找不到返回 30.0 兜底。"""
     import cv2
     for vdir in [BASE_DIR / "video", BASE_DIR / "train_data" / "video"]:
         vpath = vdir / video_name
@@ -198,7 +217,17 @@ def _get_video_fps(video_name):
 
 
 def train(epochs, lr, batch_size, val_video):
-    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    """训练 LSTM：加载特征 → 切窗口 → 数据增强 → 类别权重 → Adam + ReduceLROnPlateau。
+
+    训练完成后保存 best_lstm_fine.pt + config.json 到 lstm_runs_fine/，GUI 直接读取。
+    最佳验证准确率的 checkpoint 才会被保存（防止过拟合）。
+    """
+    # 推理设备：CUDA > MPS(Apple Silicon) > CPU
+    device = (
+        "cuda:0" if torch.cuda.is_available()
+        else "mps" if hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+        else "cpu"
+    )
     print(f"设备: {device}")
 
     train_X, train_Y, val_X, val_Y = load_data(val_video)
@@ -284,7 +313,7 @@ def train(epochs, lr, batch_size, val_video):
     print(f"\n训练完成！最佳验证准确率: {best_val_acc:.4f}")
     print(f"模型已保存: {best_model_path}")
     print(f"配置已保存: {config_path}")
-    print(f"现在可以直接运行 ai_sop_gui.py 使用新模型")
+    print("现在可以直接运行 ai_sop_gui.py 使用新模型")
 
 
 if __name__ == "__main__":

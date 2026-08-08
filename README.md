@@ -17,7 +17,6 @@
 - **步骤截图留档**：每个步骤完成时自动截取对应画面，显示在步骤卡片中
 - **生产统计**：合格率环形图、合格/超时/总数统计、事件日志
 - **工业指挥中心风格 GUI**：深色主题、无边框窗口、字体自适应缩放
-- **Web 版本**：Flask 后端 + React 前端，支持远程监控
 
 ---
 
@@ -43,8 +42,6 @@ YOLO 检测特征 (4类 × 5值 = 20维)  +  手部关键点 (2手 × 21点 × 3
 | 组件 | 用途 |
 |------|------|
 | **PyQt5** | 桌面客户端 GUI（工业指挥中心风格） |
-| **Flask + SocketIO** | Web 后端，WebSocket 推送实时帧 |
-| **React + Vite** | Web 前端 |
 | **OpenCV** | 视频读取、帧处理、绘制 |
 | **Pillow** | 中文标注绘制 |
 
@@ -92,8 +89,6 @@ PyQt5==5.15.10
   │                                └──> 顺序约束 + 命中帧确认 + 超时跳过
   │                                        │
   │                                        └──> GUI 显示 + 截图 + 日志 + 多周期循环
-  │
-  └──> [Web版] Flask WebSocket 推送帧+状态 → React 前端
 ```
 
 ---
@@ -103,7 +98,6 @@ PyQt5==5.15.10
 ```text
 .
 ├── ai_sop_gui.py              # 主程序：PyQt5 GUI + 推理引擎
-├── server.py                  # Web 后端：Flask + SocketIO
 ├── extract_features.py        # 特征提取：视频 → 146维 .npy
 ├── train_lstm.py              # LSTM 训练：数据增强 + 类别权重 + 训练
 ├── auto_label.py              # 自动伪标注：KNN 相似度给未标注区间打标签
@@ -127,11 +121,6 @@ PyQt5==5.15.10
 │   ├── timeline.csv           # 动作时间标注
 │   ├── timeline_auto.csv     # 自动伪标注结果
 │   └── features/              # 提取的 .npy 特征文件
-│
-├── ai-sop-web/                # Web 前端（React + Vite）
-│   ├── src/App.jsx
-│   ├── src/index.css
-│   └── package.json
 │
 ├── 背景图片.jpg
 ├── AI-sop界面.png
@@ -169,19 +158,9 @@ GUI 操作：
 3. 点击「开始分析」启动实时推理
 4. 步骤完成后自动在卡片中显示截图
 
-### 3. 启动 Web 版（可选）
+### 3. 训练自定义动作（可选）
 
-```bash
-# 终端 1：启动后端
-python server.py
-
-# 终端 2：启动前端
-cd ai-sop-web
-npm install
-npm run dev
-```
-
-访问 `http://localhost:5173`
+如果默认模型效果不理想，可重新训练，详见下文「训练流程」章节。
 
 ---
 

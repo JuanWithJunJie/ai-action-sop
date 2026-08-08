@@ -7,3 +7,4 @@ train_data/features/
 ai-sop-web/node_modules/
 ai-sop-web/dist/
 *.log
+.idea/
