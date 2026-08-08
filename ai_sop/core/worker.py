@@ -716,7 +716,7 @@ class InferenceWorker(QThread):
                     "cycle", "index", "event_type", "action", "fine_label",
                     "start_time_sec", "duration_sec", "start_time_beijing",
                     "done_time_sec", "done_time_beijing", "snapshot_path",
-                    "cycle_time_sec", "status",
+                    "quality", "cycle_time_sec", "status",
                 ],
                 restval="",
             )
